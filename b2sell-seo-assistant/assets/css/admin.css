@@ -10,13 +10,16 @@ body {
 }
 
 .b2sell-card {
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 20px;
+    margin-bottom: 20px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     transition: box-shadow 0.2s ease;
 }
 
 .b2sell-card:hover {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
 .button,
@@ -52,6 +55,18 @@ body {
     border-left: 4px solid #99cc66;
 }
 
+.b2sell-yellow,
+.b2sell-dashboard table .b2sell-yellow {
+    background: #fff8e5;
+    border-left: 4px solid #ffb900;
+}
+
+.b2sell-red,
+.b2sell-dashboard table .b2sell-red {
+    background: #ffe6e6;
+    border-left: 4px solid #dc3232;
+}
+
 .b2sell-footer {
     position: fixed;
     bottom: 0;
@@ -61,4 +76,91 @@ body {
     color: #ccc;
     text-align: center;
     padding: 10px 0;
+}
+
+/* Dashboard layout */
+.b2sell-dashboard-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.b2sell-dashboard-grid .b2sell-card {
+    flex: 1 1 300px;
+}
+
+.b2sell-score-card {
+    text-align: center;
+}
+
+/* Gauge styles */
+.b2sell-gauge {
+    max-width: 150px;
+    margin: 0 auto;
+}
+
+.b2sell-gauge-bg {
+    fill: none;
+    stroke: #eee;
+    stroke-width: 3.8;
+}
+
+.b2sell-gauge-bar {
+    fill: none;
+    stroke-width: 2.8;
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: center;
+}
+
+.b2sell-gauge-bar.b2sell-green {
+    stroke: #46b450;
+}
+
+.b2sell-gauge-bar.b2sell-yellow {
+    stroke: #ffb900;
+}
+
+.b2sell-gauge-bar.b2sell-red {
+    stroke: #dc3232;
+}
+
+.b2sell-gauge-text {
+    font-size: 0.5em;
+    font-weight: bold;
+    text-anchor: middle;
+    dominant-baseline: middle;
+}
+
+/* Recommendation list */
+.b2sell-recs li {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.b2sell-recs li .dashicons {
+    margin-right: 8px;
+}
+
+.b2sell-recs ul {
+    list-style: none;
+    margin: 0;
+    padding-left: 0;
+}
+
+/* GPT button */
+.b2sell-gpt-button {
+    background-color: #5450FF !important;
+    border-color: #5450FF !important;
+    font-family: Helvetica, Arial, sans-serif;
+    font-weight: bold;
+    color: #fff;
+    border-radius: 8px;
+}
+
+@media (max-width: 600px) {
+    .b2sell-dashboard-grid {
+        flex-direction: column;
+    }
 }
