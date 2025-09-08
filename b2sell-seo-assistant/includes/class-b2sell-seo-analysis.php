@@ -14,31 +14,102 @@ class B2Sell_SEO_Analysis {
     }
 
     private function render_list() {
-        $posts = get_posts( array(
-            'post_type'   => array( 'post', 'page' ),
-            'post_status' => 'publish',
-            'numberposts' => -1,
-        ) );
+        $posts      = get_posts(
+            array(
+                'post_type'   => array( 'post', 'page' ),
+                'post_status' => 'publish',
+                'numberposts' => -1,
+            )
+        );
 
-        echo '<div class="wrap">';
-        echo '<h1>Análisis SEO</h1>';
-        echo '<table class="widefat fixed">';
-        echo '<thead><tr><th>Título</th><th>Tipo</th><th>Último análisis</th><th>Puntaje</th><th></th></tr></thead><tbody>';
+        $low_score = isset( $_GET['low_score'] );
+        $order     = isset( $_GET['order'] ) ? sanitize_text_field( $_GET['order'] ) : '';
+
+        $rows = array();
         foreach ( $posts as $p ) {
             $history = get_post_meta( $p->ID, '_b2sell_seo_history', true );
             $last    = is_array( $history ) ? end( $history ) : false;
-            $date    = $last ? esc_html( $last['date'] ) : '-';
+            $date    = $last ? $last['date'] : '-';
             $score   = $last ? intval( $last['score'] ) : '-';
-            $link    = admin_url( 'admin.php?page=b2sell-seo-analisis&post_id=' . $p->ID );
-            echo '<tr>';
-            echo '<td>' . esc_html( $p->post_title ) . '</td>';
-            echo '<td>' . esc_html( $p->post_type ) . '</td>';
-            echo '<td>' . $date . '</td>';
-            echo '<td>' . $score . '</td>';
+
+            $rows[] = array(
+                'ID'      => $p->ID,
+                'title'   => $p->post_title,
+                'type'    => $p->post_type,
+                'date'    => $date,
+                'score'   => $score,
+                'history' => is_array( $history ) ? array_slice( $history, -5 ) : array(),
+            );
+        }
+
+        if ( $low_score ) {
+            $rows = array_filter(
+                $rows,
+                function( $r ) {
+                    return '-' !== $r['score'] && $r['score'] < 60;
+                }
+            );
+        }
+
+        if ( 'date' === $order ) {
+            usort(
+                $rows,
+                function( $a, $b ) {
+                    return strcmp( $b['date'], $a['date'] );
+                }
+            );
+        } elseif ( 'score' === $order ) {
+            usort(
+                $rows,
+                function( $a, $b ) {
+                    return intval( $b['score'] ) - intval( $a['score'] );
+                }
+            );
+        }
+
+        echo '<div class="wrap">';
+        echo '<h1>Análisis SEO</h1>';
+        echo '<form method="get" style="margin-bottom:15px;">';
+        echo '<input type="hidden" name="page" value="b2sell-seo-analisis" />';
+        echo '<label><input type="checkbox" name="low_score" value="1" ' . checked( $low_score, true, false ) . ' /> Mostrar solo puntaje bajo (&lt;60)</label> ';
+        echo '<select name="order">';
+        echo '<option value="">Ordenar...</option>';
+        echo '<option value="date" ' . selected( $order, 'date', false ) . '>Fecha de análisis</option>';
+        echo '<option value="score" ' . selected( $order, 'score', false ) . '>Puntaje de mayor a menor</option>';
+        echo '</select> ';
+        submit_button( 'Filtrar', '', '', false );
+        echo '</form>';
+
+        echo '<p><button id="b2sell-export-csv" class="button">Exportar CSV</button> ';
+        echo '<button id="b2sell-export-pdf" class="button">Exportar PDF</button></p>';
+
+        echo '<table id="b2sell-seo-table" class="widefat fixed">';
+        echo '<thead><tr><th>Título</th><th>Tipo</th><th>Último análisis</th><th>Puntaje</th><th></th></tr></thead><tbody>';
+        foreach ( $rows as $row ) {
+            $link    = admin_url( 'admin.php?page=b2sell-seo-analisis&post_id=' . $row['ID'] );
+            $history = esc_attr( wp_json_encode( $row['history'] ) );
+            echo '<tr class="b2sell-history-row" data-history="' . $history . '">';
+            echo '<td>' . esc_html( $row['title'] ) . '</td>';
+            echo '<td>' . esc_html( $row['type'] ) . '</td>';
+            echo '<td>' . esc_html( $row['date'] ) . '</td>';
+            echo '<td>' . esc_html( $row['score'] ) . '</td>';
             echo '<td><a class="button" href="' . esc_url( $link ) . '">Analizar</a></td>';
             echo '</tr>';
         }
         echo '</tbody></table>';
+        echo '<div id="b2sell-history" style="display:none;margin-top:20px;"><canvas id="b2sell-history-chart" height="100"></canvas></div>';
+
+        $logo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAAA8CAIAAACsOWLGAAAACXBIWXMAAA7EAAAOxAGVKw4bAAABSElEQVR4nO3b0WqDMBiG4Wbs/m/ZHQghSzTWdh8r+jxnbRQKfdG/KZZlWR7w177++wNwTcIiQlhECIsIYREhLCKERYSwiBAWEcIiQlhECIsIYREhLCKERYSwiBAWEcIiQlhECIsIYREhLCK+58ullO6d7nGx9oB2ae/E8f1uafNxtMkSn+kgrFX9RksppZT25aPJoi6NHXQnSuTyzt0K2266eiYXpHVVTLfy1BWramMSChNPhbU3SI3H1ObWe197wN4EJtBLemvGqsahapzxzVi38vqMVfnJxujdfSxVselcWF1Ge1WNAxZ3szEw/Vre3yCd7CxMTjzcID27xGc6CAte479CIoRFhLCIEBYRwiJCWEQIiwhhESEsIoRFhLCIEBYRwiJCWEQIiwhhESEsIoRFhLCIEBYRwiJCWEQIiwhhESEsIoRFxA9KdYd0WrGpfwAAAABJRU5ErkJggg==';
+        echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
+        echo '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>';
+        echo '<script>';
+        echo 'const b2sellLogo = "' . esc_js( $logo ) . '";';
+        echo 'document.getElementById("b2sell-export-csv").addEventListener("click",function(){var rows=document.querySelectorAll("#b2sell-seo-table tbody tr");var csv="Logo,"+b2sellLogo+"\nTítulo,Tipo,Último análisis,Puntaje\n";rows.forEach(function(r){var c=r.querySelectorAll("td");csv+=c[0].innerText+","+c[1].innerText+","+c[2].innerText+","+c[3].innerText+"\n";});csv+="\nDesarrollado por B2Sell SPA";var blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});var link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="b2sell-seo-report.csv";link.click();});';
+        echo 'document.getElementById("b2sell-export-pdf").addEventListener("click",function(){const {jsPDF}=window.jspdf;var doc=new jsPDF();var img=new Image();img.src=b2sellLogo;img.onload=function(){doc.addImage(img,"PNG",10,10,40,15);doc.setFontSize(16);doc.text("Reporte de Análisis SEO",10,30);var y=40;doc.setFontSize(10);document.querySelectorAll("#b2sell-seo-table tbody tr").forEach(function(r){var c=r.querySelectorAll("td");doc.text(c[0].innerText+" | "+c[1].innerText+" | "+c[2].innerText+" | "+c[3].innerText,10,y);y+=10;});doc.text("Desarrollado por B2Sell SPA",10,280);doc.save("b2sell-seo-report.pdf");};});';
+        echo 'var ctx=document.getElementById("b2sell-history-chart").getContext("2d");var chart=new Chart(ctx,{type:"line",data:{labels:[],datasets:[{label:"Puntaje",data:[],borderColor:"#0073aa",fill:false}]},options:{scales:{y:{beginAtZero:true,max:100}}}});';
+        echo 'document.querySelectorAll(".b2sell-history-row").forEach(function(row){row.addEventListener("click",function(e){if(e.target.tagName.toLowerCase()==="a"){return;}var data=JSON.parse(this.dataset.history||"[]");if(!data.length){return;}var labels=data.map(function(i){return i.date;});var scores=data.map(function(i){return parseInt(i.score);});chart.data.labels=labels;chart.data.datasets[0].data=scores;chart.update();document.getElementById("b2sell-history").style.display="block";});});';
+        echo '</script>';
+        echo '<p style="font-size:12px;color:#666;">Desarrollado por B2Sell SPA.</p>';
         echo '</div>';
     }
 
