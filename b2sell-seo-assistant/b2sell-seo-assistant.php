@@ -12,6 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-seo-analysis.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-gpt.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-sem.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-editor-metabox.php';
 
 class B2Sell_SEO_Assistant {
     private $analysis;
