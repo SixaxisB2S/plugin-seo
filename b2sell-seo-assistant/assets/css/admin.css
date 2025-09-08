@@ -1,0 +1,64 @@
+/* Admin styles for B2Sell SEO Assistant */
+body {
+    font-family: Helvetica, Arial, sans-serif;
+    color: #27282D;
+    padding-bottom: 60px;
+}
+
+.wrap {
+    max-width: none;
+}
+
+.b2sell-card {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: box-shadow 0.2s ease;
+}
+
+.b2sell-card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.button,
+.button-primary {
+    border-radius: 8px;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.button-primary,
+.button.button-primary {
+    background-color: #3E6399;
+    border-color: #3E6399;
+}
+
+.button:hover,
+.button-primary:hover {
+    background-color: #33527d;
+    border-color: #33527d;
+}
+
+.b2sell-dashboard h1,
+.b2sell-dashboard h2,
+.b2sell-dashboard h3,
+.wrap h1,
+.wrap h2,
+.wrap h3 {
+    color: #3E6399;
+}
+
+.b2sell-green,
+.b2sell-dashboard table .b2sell-green {
+    background: #e6ffed;
+    border-left: 4px solid #99cc66;
+}
+
+.b2sell-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: #f9f9f9;
+    color: #ccc;
+    text-align: center;
+    padding: 10px 0;
+}

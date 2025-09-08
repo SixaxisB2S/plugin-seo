@@ -109,7 +109,6 @@ class B2Sell_SEO_Analysis {
         echo 'var ctx=document.getElementById("b2sell-history-chart").getContext("2d");var chart=new Chart(ctx,{type:"line",data:{labels:[],datasets:[{label:"Puntaje",data:[],borderColor:"#0073aa",fill:false}]},options:{scales:{y:{beginAtZero:true,max:100}}}});';
         echo 'document.querySelectorAll(".b2sell-history-row").forEach(function(row){row.addEventListener("click",function(e){if(e.target.tagName.toLowerCase()==="a"){return;}var data=JSON.parse(this.dataset.history||"[]");if(!data.length){return;}var labels=data.map(function(i){return i.date;});var scores=data.map(function(i){return parseInt(i.score);});chart.data.labels=labels;chart.data.datasets[0].data=scores;chart.update();document.getElementById("b2sell-history").style.display="block";});});';
         echo '</script>';
-        echo '<p style="font-size:12px;color:#666;">Desarrollado por B2Sell SPA.</p>';
         echo '</div>';
     }
 

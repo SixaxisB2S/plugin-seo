@@ -37,7 +37,6 @@ class B2Sell_GPT_Generator {
             <button class="button button-primary" id="b2sell_gpt_post_btn">Crear post (~600 palabras)</button>
             <hr/>
             <div id="b2sell_gpt_results" style="border:1px solid #ccc;padding:10px;display:none;"></div>
-            <p style="font-size:12px;color:#666;margin-top:10px;">Desarrollado por B2Sell SPA.</p>
         </div>
         <script>
         const b2sell_gpt_nonce = '<?php echo esc_js( $nonce ); ?>';

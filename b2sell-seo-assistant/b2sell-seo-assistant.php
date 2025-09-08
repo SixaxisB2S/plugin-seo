@@ -21,6 +21,8 @@ class B2Sell_SEO_Assistant {
 
     public function __construct() {
         add_action( 'admin_menu', array( $this, 'register_menu' ) );
+        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
+        add_action( 'admin_footer', array( $this, 'render_footer' ) );
         $this->analysis = new B2Sell_SEO_Analysis();
         $this->gpt      = new B2Sell_GPT_Generator();
         $this->sem      = new B2Sell_SEM_Campaigns();
@@ -87,7 +89,6 @@ class B2Sell_SEO_Assistant {
         echo '<h1>' . esc_html( $title ) . '</h1>';
         echo '<p>Sección en desarrollo – B2SELL</p>';
         echo '<hr />';
-        echo '<p style="font-size:12px;color:#666;">Desarrollado por B2Sell SPA.</p>';
         echo '</div>';
     }
 
@@ -172,7 +173,6 @@ class B2Sell_SEO_Assistant {
         }
 
         echo '<p><a class="button button-primary button-hero" href="' . esc_url( admin_url( 'admin.php?page=b2sell-seo-gpt' ) ) . '">Generar contenido con GPT</a></p>';
-        echo '<p style="font-size:12px;color:#666;text-align:center;">Desarrollado por B2Sell SPA.</p>';
         echo '</div>';
     }
 
@@ -204,8 +204,21 @@ class B2Sell_SEO_Assistant {
         echo '<input type="text" id="b2sell_openai_api_key" name="b2sell_openai_api_key" value="' . esc_attr( $api_key ) . '" style="width:400px;" />';
         submit_button( 'Guardar API Key' );
         echo '</form>';
-        echo '<p style="font-size:12px;color:#666;">Desarrollado por B2Sell SPA.</p>';
         echo '</div>';
+    }
+
+    public function enqueue_admin_assets( $hook ) {
+        if ( false === strpos( $hook, 'b2sell-seo' ) ) {
+            return;
+        }
+        wp_enqueue_style( 'b2sell-seo-admin', plugin_dir_url( __FILE__ ) . 'assets/css/admin.css', array(), '1.0.0' );
+    }
+
+    public function render_footer() {
+        $screen = get_current_screen();
+        if ( strpos( $screen->id, 'b2sell-seo' ) !== false ) {
+            echo '<div class="b2sell-footer">Desarrollado por B2Sell SPA</div>';
+        }
     }
 }
 
