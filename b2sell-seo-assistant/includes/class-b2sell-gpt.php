@@ -45,9 +45,9 @@ class B2Sell_GPT_Generator {
             const postId = document.getElementById('b2sell_gpt_post').value;
             const paragraph = document.getElementById('b2sell_gpt_paragraph').value;
             jQuery.post(ajaxurl,{action:'b2sell_gpt_generate',gpt_action:type,keyword:keyword,post_id:postId,paragraph:paragraph,_wpnonce:b2sell_gpt_nonce},function(res){
+                const r=document.getElementById('b2sell_gpt_results');
+                r.style.display='block';
                 if(res.success){
-                    const r=document.getElementById('b2sell_gpt_results');
-                    r.style.display='block';
                     let html='<h2>Contenido generado por B2SELL GPT Assistant</h2><pre>'+res.data.content+'</pre>';
                     html+='<button class="button" onclick="b2sellGPTCopy()">Copiar</button>';
                     if(postId){
@@ -55,7 +55,8 @@ class B2Sell_GPT_Generator {
                     }
                     r.innerHTML=html;
                 }else{
-                    alert(res.data);
+                    const msg = res.data && res.data.message ? res.data.message : res.data;
+                    r.innerHTML='<div class="b2sell-red" style="padding:10px;">'+msg+'</div>';
                 }
             });
         }
@@ -82,14 +83,14 @@ class B2Sell_GPT_Generator {
     public function ajax_generate() {
         check_ajax_referer( 'b2sell_gpt_nonce' );
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( 'Permisos insuficientes' );
+            wp_send_json_error( array( 'message' => 'Permisos insuficientes' ) );
         }
         $action    = sanitize_text_field( $_POST['gpt_action'] ?? '' );
         $keyword   = sanitize_text_field( $_POST['keyword'] ?? '' );
         $paragraph = sanitize_textarea_field( $_POST['paragraph'] ?? '' );
         $api_key   = get_option( 'b2sell_openai_api_key', '' );
         if ( ! $api_key ) {
-            wp_send_json_error( 'API Key no configurada' );
+            wp_send_json_error( array( 'message' => 'API Key no configurada' ) );
         }
         switch ( $action ) {
             case 'title':
@@ -108,7 +109,7 @@ class B2Sell_GPT_Generator {
                 $prompt = 'Redacta un artículo de aproximadamente 600 palabras optimizado para SEO sobre: ' . $keyword;
                 break;
             default:
-                wp_send_json_error( 'Acción no válida' );
+                wp_send_json_error( array( 'message' => 'Acción no válida' ) );
         }
         $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', array(
             'headers' => array(
@@ -121,13 +122,23 @@ class B2Sell_GPT_Generator {
                     array( 'role' => 'user', 'content' => $prompt ),
                 ),
             ) ),
+            'timeout' => 30,
         ) );
         if ( is_wp_error( $response ) ) {
-            wp_send_json_error( $response->get_error_message() );
+            $error_message = $response->get_error_message();
+            if ( false !== stripos( $error_message, 'timed out' ) || false !== stripos( $error_message, 'timeout' ) ) {
+                $msg = 'La solicitud a OpenAI demoró demasiado (timeout). Intenta nuevamente o aumenta los recursos del servidor.';
+            } else {
+                $msg = 'Error de conexión con OpenAI: tu servidor no logra conectarse. Revisa el firewall del hosting y asegúrate de permitir salida HTTPS hacia api.openai.com (puerto 443).';
+            }
+            wp_send_json_error( array( 'message' => $msg ) );
         }
         $data = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( isset( $data['error']['message'] ) ) {
+            wp_send_json_error( array( 'message' => $data['error']['message'] ) );
+        }
         if ( ! isset( $data['choices'][0]['message']['content'] ) ) {
-            wp_send_json_error( 'Respuesta inválida de OpenAI' );
+            wp_send_json_error( array( 'message' => 'Respuesta inválida de OpenAI' ) );
         }
         $content = trim( $data['choices'][0]['message']['content'] );
         wp_send_json_success( array( 'content' => $content ) );

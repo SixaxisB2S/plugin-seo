@@ -157,7 +157,7 @@ class B2Sell_SEM_Campaigns {
         echo '</select>';
         echo '<div id="b2sell_sem_gpt_results" style="display:none;border:1px solid #ccc;padding:10px;margin-top:20px;"></div>';
         $nonce = wp_create_nonce( 'b2sell_sem_gpt' );
-        echo '<script>var b2sellLastSuggestions=null;jQuery(function($){$("#b2sell_sem_product").on("change",function(){var pid=$(this).val();if(!pid){return;}$("#b2sell_sem_gpt_results").show().html("Generando...");$.post(ajaxurl,{action:"b2sell_sem_gpt",product_id:pid,_wpnonce:"' . esc_js( $nonce ) . '"},function(res){if(res.success){b2sellLastSuggestions=res.data;var html="<h2>Sugerencias de anuncios - B2SELL</h2>";html+="<h3>Titulares</h3><ul>";res.data.headlines.forEach(function(h){html+="<li>"+h+"</li>";});html+="</ul><h3>Descripciones</h3><ul>";res.data.descriptions.forEach(function(d){html+="<li>"+d+"</li>";});html+="</ul><h3>Palabras clave</h3><ul>";res.data.keywords.forEach(function(k){html+="<li>"+k+"</li>";});html+="</ul><button class=\"button\" id=\"b2sell_sem_copy\">Copiar</button> <button class=\"button\" id=\"b2sell_sem_csv\">Exportar CSV</button>";$("#b2sell_sem_gpt_results").html(html);}else{$("#b2sell_sem_gpt_results").html("<div class=\"error\"><p>"+res.data+"</p></div>");}});});$(document).on("click","#b2sell_sem_copy",function(){var text=$("#b2sell_sem_gpt_results").text();navigator.clipboard.writeText(text);});$(document).on("click","#b2sell_sem_csv",function(){if(!b2sellLastSuggestions)return;var csv="Titulares\n"+b2sellLastSuggestions.headlines.join("\n")+"\n\nDescripciones\n"+b2sellLastSuggestions.descriptions.join("\n")+"\n\nPalabras clave\n"+b2sellLastSuggestions.keywords.join(", ");var blob=new Blob([csv],{type:"text/csv"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="sugerencias.csv";a.click();});});</script>';
+        echo '<script>var b2sellLastSuggestions=null;jQuery(function($){$("#b2sell_sem_product").on("change",function(){var pid=$(this).val();if(!pid){return;}$("#b2sell_sem_gpt_results").show().html("Generando...");$.post(ajaxurl,{action:"b2sell_sem_gpt",product_id:pid,_wpnonce:"' . esc_js( $nonce ) . '"},function(res){if(res.success){b2sellLastSuggestions=res.data;var html="<h2>Sugerencias de anuncios - B2SELL</h2>";html+="<h3>Titulares</h3><ul>";res.data.headlines.forEach(function(h){html+="<li>"+h+"</li>";});html+="</ul><h3>Descripciones</h3><ul>";res.data.descriptions.forEach(function(d){html+="<li>"+d+"</li>";});html+="</ul><h3>Palabras clave</h3><ul>";res.data.keywords.forEach(function(k){html+="<li>"+k+"</li>";});html+="</ul><button class=\"button\" id=\"b2sell_sem_copy\">Copiar</button> <button class=\"button\" id=\"b2sell_sem_csv\">Exportar CSV</button>";$("#b2sell_sem_gpt_results").html(html);}else{var msg=res.data && res.data.message?res.data.message:res.data;$("#b2sell_sem_gpt_results").html("<div class=\'b2sell-red\' style=\'padding:10px;\'>"+msg+"</div>");}});});$(document).on("click","#b2sell_sem_copy",function(){var text=$("#b2sell_sem_gpt_results").text();navigator.clipboard.writeText(text);});$(document).on("click","#b2sell_sem_csv",function(){if(!b2sellLastSuggestions)return;var csv="Titulares\n"+b2sellLastSuggestions.headlines.join("\n")+"\n\nDescripciones\n"+b2sellLastSuggestions.descriptions.join("\n")+"\n\nPalabras clave\n"+b2sellLastSuggestions.keywords.join(", ");var blob=new Blob([csv],{type:"text/csv"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="sugerencias.csv";a.click();});});</script>';
     }
 
     public function ajax_test_connection() {
@@ -197,19 +197,19 @@ class B2Sell_SEM_Campaigns {
     public function ajax_gpt_suggestions() {
         check_ajax_referer( 'b2sell_sem_gpt' );
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( 'Permisos insuficientes' );
+            wp_send_json_error( array( 'message' => 'Permisos insuficientes' ) );
         }
         if ( ! function_exists( 'wc_get_product' ) ) {
-            wp_send_json_error( 'WooCommerce no disponible' );
+            wp_send_json_error( array( 'message' => 'WooCommerce no disponible' ) );
         }
         $product_id = intval( $_POST['product_id'] ?? 0 );
         $product    = wc_get_product( $product_id );
         if ( ! $product ) {
-            wp_send_json_error( 'Producto inválido' );
+            wp_send_json_error( array( 'message' => 'Producto inválido' ) );
         }
         $api_key = get_option( 'b2sell_openai_api_key', '' );
         if ( ! $api_key ) {
-            wp_send_json_error( 'API Key no configurada' );
+            wp_send_json_error( array( 'message' => 'API Key no configurada' ) );
         }
         $name  = $product->get_name();
         $price = $product->get_price();
@@ -232,18 +232,28 @@ class B2Sell_SEM_Campaigns {
                         ),
                     )
                 ),
+                'timeout' => 30,
             )
         );
         if ( is_wp_error( $response ) ) {
-            wp_send_json_error( $response->get_error_message() );
+            $error_message = $response->get_error_message();
+            if ( false !== stripos( $error_message, 'timed out' ) || false !== stripos( $error_message, 'timeout' ) ) {
+                $msg = 'La solicitud a OpenAI demoró demasiado (timeout). Intenta nuevamente o aumenta los recursos del servidor.';
+            } else {
+                $msg = 'Error de conexión con OpenAI: tu servidor no logra conectarse. Revisa el firewall del hosting y asegúrate de permitir salida HTTPS hacia api.openai.com (puerto 443).';
+            }
+            wp_send_json_error( array( 'message' => $msg ) );
         }
         $data = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( isset( $data['error']['message'] ) ) {
+            wp_send_json_error( array( 'message' => $data['error']['message'] ) );
+        }
         if ( ! isset( $data['choices'][0]['message']['content'] ) ) {
-            wp_send_json_error( 'Respuesta inválida de OpenAI' );
+            wp_send_json_error( array( 'message' => 'Respuesta inválida de OpenAI' ) );
         }
         $json = json_decode( $data['choices'][0]['message']['content'], true );
         if ( ! $json || ! isset( $json['headlines'] ) ) {
-            wp_send_json_error( 'No se pudo parsear la respuesta de GPT' );
+            wp_send_json_error( array( 'message' => 'No se pudo parsear la respuesta de GPT' ) );
         }
         wp_send_json_success( $json );
     }
