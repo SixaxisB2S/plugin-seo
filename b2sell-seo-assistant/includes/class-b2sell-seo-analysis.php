@@ -125,13 +125,14 @@ class B2Sell_SEO_Analysis {
                 $history = array();
             }
             $history[] = array(
-                'date'           => current_time( 'mysql' ),
-                'score'          => $results['score'],
-                'recommendations'=> array_slice( $results['recommendations'], 0, 3 ),
+                'date'  => current_time( 'mysql' ),
+                'score' => $results['score'],
+                'recommendations' => array_slice( wp_list_pluck( $results['recommendations'], 'message' ), 0, 3 ),
             );
             update_post_meta( $post_id, '_b2sell_seo_history', $history );
         }
 
+        $nonce = wp_create_nonce( 'b2sell_gpt_nonce' );
         echo '<div class="wrap">';
         echo '<h1>Analizando: ' . esc_html( $post->post_title ) . '</h1>';
         echo '<form method="post">';
@@ -153,9 +154,55 @@ class B2Sell_SEO_Analysis {
             if ( ! empty( $results['recommendations'] ) ) {
                 echo '<h2>Recomendaciones</h2><ul>';
                 foreach ( $results['recommendations'] as $rec ) {
-                    echo '<li>' . esc_html( $rec ) . '</li>';
+                    echo '<li>' . esc_html( $rec['message'] );
+                    if ( ! empty( $rec['action'] ) ) {
+                        echo ' <button class="button b2sell-gpt-suggest" data-action="' . esc_attr( $rec['action'] ) . '" data-post="' . esc_attr( $post_id ) . '" data-keyword="' . esc_attr( $rec['keyword'] ?? '' ) . '" data-current="' . esc_attr( $rec['current'] ?? '' ) . '">Sugerencia con GPT</button>';
+                    }
+                    echo '</li>';
                 }
                 echo '</ul>';
+                echo '<div id="b2sell-gpt-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;">
+                        <div class="b2sell-modal-inner" style="background:#fff;padding:20px;max-width:500px;width:90%;">
+                            <h2>Sugerencia automática por B2SELL GPT Assistant</h2>
+                            <pre id="b2sell-gpt-text" style="white-space:pre-wrap"></pre>
+                            <p>
+                                <button class="button" id="b2sell-gpt-copy">Copiar</button>
+                                <button class="button button-primary" id="b2sell-gpt-insert">Insertar</button>
+                                <button class="button" id="b2sell-gpt-close">Cerrar</button>
+                            </p>
+                        </div>
+                    </div>';
+                echo '<script>
+                const b2sell_gpt_nonce = "' . esc_js( $nonce ) . '";
+                jQuery(function($){
+                    $(".b2sell-gpt-suggest").on("click",function(){
+                        const action=$(this).data("action");
+                        const post=$(this).data("post");
+                        const keyword=$(this).data("keyword");
+                        const current=$(this).data("current");
+                        $("#b2sell-gpt-modal").css("display","flex");
+                        $("#b2sell-gpt-text").text("Generando...");
+                        $("#b2sell-gpt-insert").data("action",action).data("post",post);
+                        $.post(ajaxurl,{action:"b2sell_gpt_generate",gpt_action:action,keyword:keyword,paragraph:current,post_id:post,_wpnonce:b2sell_gpt_nonce},function(res){
+                            if(res.success){$("#b2sell-gpt-text").text(res.data.content);}else{$("#b2sell-gpt-text").text(res.data);}
+                        });
+                    });
+                    $("#b2sell-gpt-copy").on("click",function(){
+                        navigator.clipboard.writeText($("#b2sell-gpt-text").text());
+                    });
+                    $("#b2sell-gpt-insert").on("click",function(){
+                        const action=$(this).data("action");
+                        const post=$(this).data("post");
+                        const content=$("#b2sell-gpt-text").text();
+                        $.post(ajaxurl,{action:"b2sell_gpt_insert",gpt_action:action,post_id:post,content:content,_wpnonce:b2sell_gpt_nonce},function(res){
+                            alert(res.success?"Contenido insertado":res.data);
+                        });
+                    });
+                    $("#b2sell-gpt-close").on("click",function(){
+                        $("#b2sell-gpt-modal").hide();
+                    });
+                });
+                </script>';
             }
         }
 
@@ -167,7 +214,7 @@ class B2Sell_SEO_Analysis {
         $post     = get_post( $post_id );
         $content  = $post->post_content;
         $metrics  = array();
-        $recs     = array();
+        $recs     = array(); // array of arrays with message/action/current/keyword
         $score    = 0;
         $host     = parse_url( home_url(), PHP_URL_HOST );
 
@@ -179,10 +226,20 @@ class B2Sell_SEO_Analysis {
             $title_color = 'green';
         } elseif ( 5 === $title_score ) {
             $title_color = 'yellow';
-            $recs[]      = 'El título debería estar entre 30 y 60 caracteres.';
+            $recs[]      = array(
+                'message' => 'El título debería estar entre 30 y 60 caracteres.',
+                'action'  => 'title',
+                'current' => $post->post_title,
+                'keyword' => $keyword,
+            );
         } else {
             $title_color = 'red';
-            $recs[]      = 'El título excede los límites recomendados (30-60 caracteres).';
+            $recs[]      = array(
+                'message' => 'El título excede los límites recomendados (30-60 caracteres).',
+                'action'  => 'title',
+                'current' => $post->post_title,
+                'keyword' => $keyword,
+            );
         }
         $metrics['Longitud del título'] = array(
             'value' => $title_len . ' caracteres',
@@ -201,10 +258,20 @@ class B2Sell_SEO_Analysis {
             $meta_color = 'green';
         } elseif ( 5 === $meta_score ) {
             $meta_color = 'yellow';
-            $recs[]     = 'La meta description debería tener entre 70 y 160 caracteres.';
+            $recs[]     = array(
+                'message' => 'La meta description debería tener entre 70 y 160 caracteres.',
+                'action'  => 'meta',
+                'current' => $meta_description,
+                'keyword' => $keyword ? $keyword : $post->post_title,
+            );
         } else {
             $meta_color = 'red';
-            $recs[]     = 'La meta description está fuera del rango recomendado (70-160 caracteres).';
+            $recs[]     = array(
+                'message' => 'La meta description está fuera del rango recomendado (70-160 caracteres).',
+                'action'  => 'meta',
+                'current' => $meta_description,
+                'keyword' => $keyword ? $keyword : $post->post_title,
+            );
         }
         $metrics['Longitud de meta description'] = array(
             'value' => $meta_len . ' caracteres',
@@ -243,13 +310,13 @@ class B2Sell_SEO_Analysis {
             $head_score += $h2 ? 3 : 0;
             $head_score += $h3 ? 3 : 0;
             if ( ! $h1 ) {
-                $recs[] = 'Agregar la palabra clave en un H1.';
+                $recs[] = array( 'message' => 'Agregar la palabra clave en un H1.' );
             }
             if ( ! $h2 ) {
-                $recs[] = 'Agregar la palabra clave en algún H2.';
+                $recs[] = array( 'message' => 'Agregar la palabra clave en algún H2.' );
             }
             if ( ! $h3 ) {
-                $recs[] = 'Agregar la palabra clave en algún H3.';
+                $recs[] = array( 'message' => 'Agregar la palabra clave en algún H3.' );
             }
         }
         $score += $head_score;
@@ -278,10 +345,10 @@ class B2Sell_SEO_Analysis {
         $link_score = ( $internal_links > 0 ? 5 : 0 ) + ( $external_links > 0 ? 5 : 0 );
         $score     += $link_score;
         if ( $internal_links === 0 ) {
-            $recs[] = 'Agregar enlaces internos.';
+            $recs[] = array( 'message' => 'Agregar enlaces internos.' );
         }
         if ( $external_links === 0 ) {
-            $recs[] = 'Agregar enlaces externos.';
+            $recs[] = array( 'message' => 'Agregar enlaces externos.' );
         }
         $links_color                     = ( 10 === $link_score ) ? 'green' : ( ( $link_score >= 5 ) ? 'yellow' : 'red' );
         $metrics['Enlaces internos/externos'] = array(
@@ -304,10 +371,20 @@ class B2Sell_SEO_Analysis {
             $alt_score = 10;
         } elseif ( $img_with_alt > 0 ) {
             $alt_score = 5;
-            $recs[]    = 'Agregar atributos ALT a todas las imágenes.';
+            $recs[]    = array(
+                'message' => 'Agregar atributos ALT a todas las imágenes.',
+                'action'  => 'alt',
+                'current' => $post->post_title,
+                'keyword' => $keyword ? $keyword : $post->post_title,
+            );
         } else {
             $alt_score = 0;
-            $recs[]    = 'Agregar atributos ALT a las imágenes.';
+            $recs[]    = array(
+                'message' => 'Agregar atributos ALT a las imágenes.',
+                'action'  => 'alt',
+                'current' => $post->post_title,
+                'keyword' => $keyword ? $keyword : $post->post_title,
+            );
         }
         $score     += $alt_score;
         $alt_color  = ( 10 === $alt_score ) ? 'green' : ( ( $alt_score > 0 ) ? 'yellow' : 'red' );
@@ -331,7 +408,7 @@ class B2Sell_SEO_Analysis {
         $schema_score = $schema ? 10 : 0;
         $score       += $schema_score;
         if ( ! $schema ) {
-            $recs[] = 'Agregar datos estructurados (schema.org).';
+            $recs[] = array( 'message' => 'Agregar datos estructurados (schema.org).' );
         }
         $schema_color                    = $schema ? 'green' : 'red';
         $metrics['Uso de schema.org'] = array(
@@ -359,16 +436,26 @@ class B2Sell_SEO_Analysis {
             } elseif ( $density >= 0.5 && $density <= 4 ) {
                 $density_score = 5;
                 $density_color = 'yellow';
-                $recs[]        = 'Ajustar la densidad de palabras clave entre 1% y 3%.';
+                $recs[]        = array(
+                    'message' => 'Ajustar la densidad de palabras clave entre 1% y 3%.',
+                    'action'  => 'rewrite',
+                    'current' => wp_trim_words( $text_content, 50, '' ),
+                    'keyword' => $keyword,
+                );
             } else {
                 $density_score = 0;
                 $density_color = 'red';
-                $recs[]        = 'Densidad de palabras clave fuera de rango (1%-3%).';
+                $recs[]        = array(
+                    'message' => 'Densidad de palabras clave fuera de rango (1%-3%).',
+                    'action'  => 'rewrite',
+                    'current' => wp_trim_words( $text_content, 50, '' ),
+                    'keyword' => $keyword,
+                );
             }
         } else {
             $density_score = 0;
             $density_color = 'red';
-            $recs[]        = 'Definir una palabra clave principal.';
+            $recs[]        = array( 'message' => 'Definir una palabra clave principal.' );
         }
         $score += $density_score;
         $metrics['Densidad de palabra clave'] = array(
@@ -384,11 +471,11 @@ class B2Sell_SEO_Analysis {
         } elseif ( $readability > 40 ) {
             $read_score = 5;
             $read_color = 'yellow';
-            $recs[]     = 'Mejorar la legibilidad del texto.';
+            $recs[]     = array( 'message' => 'Mejorar la legibilidad del texto.' );
         } else {
             $read_score = 0;
             $read_color = 'red';
-            $recs[]     = 'Legibilidad baja, simplificar el contenido.';
+            $recs[]     = array( 'message' => 'Legibilidad baja, simplificar el contenido.' );
         }
         $score += $read_score;
         $metrics['Legibilidad (Flesch)'] = array(
@@ -409,11 +496,11 @@ class B2Sell_SEO_Analysis {
         } elseif ( $load_time > 0 && $load_time <= 4 ) {
             $speed_score = 5;
             $speed_color = 'yellow';
-            $recs[]      = 'Mejorar el tiempo de carga (<2s).';
+            $recs[]      = array( 'message' => 'Mejorar el tiempo de carga (<2s).' );
         } else {
             $speed_score = 0;
             $speed_color = 'red';
-            $recs[]      = 'Tiempo de carga excesivo (>4s).';
+            $recs[]      = array( 'message' => 'Tiempo de carga excesivo (>4s).' );
         }
         $score += $speed_score;
         $metrics['Tiempo de carga'] = array(
