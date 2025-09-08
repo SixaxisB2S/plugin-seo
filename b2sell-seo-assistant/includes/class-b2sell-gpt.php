@@ -102,6 +102,9 @@ class B2Sell_GPT_Generator {
             case 'rewrite':
                 $prompt = 'Reescribe el siguiente párrafo mejorando el SEO y usando mejores palabras clave:\n\n' . $paragraph;
                 break;
+            case 'alt':
+                $prompt = 'Sugiere un texto alternativo descriptivo y optimizado para SEO para una imagen relacionada con: ' . $keyword;
+                break;
             case 'post':
                 $prompt = 'Redacta un artículo de aproximadamente 600 palabras optimizado para SEO sobre: ' . $keyword;
                 break;
@@ -155,6 +158,27 @@ class B2Sell_GPT_Generator {
                 break;
             case 'post':
                 wp_update_post( array( 'ID' => $post_id, 'post_content' => $content ) );
+                break;
+            case 'alt':
+                $post     = get_post( $post_id );
+                $html     = $post->post_content;
+                $dom      = new DOMDocument();
+                libxml_use_internal_errors( true );
+                $dom->loadHTML( '<meta http-equiv="content-type" content="text/html; charset=utf-8" />' . $html );
+                libxml_clear_errors();
+                $imgs = $dom->getElementsByTagName( 'img' );
+                foreach ( $imgs as $img ) {
+                    if ( '' === $img->getAttribute( 'alt' ) ) {
+                        $img->setAttribute( 'alt', $content );
+                        break;
+                    }
+                }
+                $body       = $dom->getElementsByTagName( 'body' )->item( 0 );
+                $new_html   = '';
+                foreach ( $body->childNodes as $child ) {
+                    $new_html .= $dom->saveHTML( $child );
+                }
+                wp_update_post( array( 'ID' => $post_id, 'post_content' => $new_html ) );
                 break;
             default:
                 wp_send_json_error( 'Acción no válida' );
