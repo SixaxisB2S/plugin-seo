@@ -54,8 +54,9 @@ class B2Sell_SEO_Analysis {
                 $history = array();
             }
             $history[] = array(
-                'date'  => current_time( 'mysql' ),
-                'score' => $results['score'],
+                'date'           => current_time( 'mysql' ),
+                'score'          => $results['score'],
+                'recommendations'=> array_slice( $results['recommendations'], 0, 3 ),
             );
             update_post_meta( $post_id, '_b2sell_seo_history', $history );
         }
