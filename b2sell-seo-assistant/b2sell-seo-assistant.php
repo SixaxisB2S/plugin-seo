@@ -11,15 +11,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-seo-analysis.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-gpt.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-sem.php';
 
 class B2Sell_SEO_Assistant {
     private $analysis;
     private $gpt;
+    private $sem;
 
     public function __construct() {
         add_action( 'admin_menu', array( $this, 'register_menu' ) );
         $this->analysis = new B2Sell_SEO_Analysis();
         $this->gpt      = new B2Sell_GPT_Generator();
+        $this->sem      = new B2Sell_SEM_Campaigns();
     }
 
     public function register_menu() {
@@ -100,7 +103,7 @@ class B2Sell_SEO_Assistant {
     }
 
     public function sem_page() {
-        $this->render_section( 'Campañas SEM' );
+        $this->sem->render_admin_page();
     }
 
     public function config_page() {
