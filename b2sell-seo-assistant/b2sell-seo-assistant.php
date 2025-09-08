@@ -9,10 +9,14 @@ Author: B2Sell SPA
 if ( ! defined( 'ABSPATH' ) ) {
     exit; // Salir si se accede directamente.
 }
+require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-seo-analysis.php';
 
 class B2Sell_SEO_Assistant {
+    private $analysis;
+
     public function __construct() {
         add_action( 'admin_menu', array( $this, 'register_menu' ) );
+        $this->analysis = new B2Sell_SEO_Analysis();
     }
 
     public function register_menu() {
@@ -85,7 +89,7 @@ class B2Sell_SEO_Assistant {
     }
 
     public function analisis_page() {
-        $this->render_section( 'Análisis SEO' );
+        $this->analysis->render_admin_page();
     }
 
     public function gpt_page() {
