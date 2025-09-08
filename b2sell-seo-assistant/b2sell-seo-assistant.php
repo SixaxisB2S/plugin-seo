@@ -132,21 +132,15 @@ class B2Sell_SEO_Assistant {
 
         echo '<div class="wrap b2sell-dashboard">';
         echo '<h1>B2SELL Dashboard</h1>';
-        echo '<style>
-        .b2sell-card{padding:20px;margin-bottom:20px;border-radius:8px;background:#fff;}
-        .b2sell-green{background:#e6ffed;border-left:4px solid #46b450;}
-        .b2sell-yellow{background:#fff8e5;border-left:4px solid #ffb900;}
-        .b2sell-red{background:#ffe6e6;border-left:4px solid #dc3232;}
-        .b2sell-score{font-size:32px;font-weight:bold;}
-        .b2sell-dashboard table .b2sell-green{background:#e6ffed;}
-        .b2sell-dashboard table .b2sell-yellow{background:#fff8e5;}
-        .b2sell-dashboard table .b2sell-red{background:#ffe6e6;}
-        .b2sell-recs ul{margin:0;padding-left:20px;}
-        </style>';
+        echo '<div class="b2sell-dashboard-grid">';
 
-        echo '<div class="b2sell-card b2sell-' . esc_attr( $avg_color ) . '">';
+        echo '<div class="b2sell-card b2sell-score-card">';
         echo '<h2>Puntaje SEO Global</h2>';
-        echo '<p class="b2sell-score">' . esc_html( $avg_score ) . '/100</p>';
+        echo '<svg viewBox="0 0 36 36" class="b2sell-gauge">';
+        echo '<path class="b2sell-gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />';
+        echo '<path class="b2sell-gauge-bar b2sell-' . esc_attr( $avg_color ) . '" stroke-dasharray="' . esc_attr( $avg_score ) . ',100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />';
+        echo '<text x="18" y="20.35" class="b2sell-gauge-text">' . esc_html( $avg_score ) . '%</text>';
+        echo '</svg>';
         echo '</div>';
 
         echo '<div class="b2sell-card">';
@@ -165,14 +159,17 @@ class B2Sell_SEO_Assistant {
 
         if ( $latest && ! empty( $latest['recommendations'] ) ) {
             echo '<div class="b2sell-card b2sell-recs">';
-            echo '<h2>Recomendaciones recientes</h2><ul>';
-            foreach ( array_slice( $latest['recommendations'], 0, 3 ) as $rec ) {
-                echo '<li>' . esc_html( $rec ) . '</li>';
+            echo '<h2>Recomendaciones críticas</h2><ul>';
+            $icons = array( 'dashicons-warning', 'dashicons-info', 'dashicons-yes' );
+            foreach ( array_slice( $latest['recommendations'], 0, 3 ) as $idx => $rec ) {
+                $icon = $icons[ $idx % 3 ];
+                echo '<li><span class="dashicons ' . esc_attr( $icon ) . '"></span>' . esc_html( $rec ) . '</li>';
             }
             echo '</ul></div>';
         }
 
-        echo '<p><a class="button button-primary button-hero" href="' . esc_url( admin_url( 'admin.php?page=b2sell-seo-gpt' ) ) . '">Generar contenido con GPT</a></p>';
+        echo '</div>';
+        echo '<p><a class="button button-primary button-hero b2sell-gpt-button" href="' . esc_url( admin_url( 'admin.php?page=b2sell-seo-gpt' ) ) . '">Generar contenido con GPT</a></p>';
         echo '</div>';
     }
 
