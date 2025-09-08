@@ -10,13 +10,16 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit; // Salir si se accede directamente.
 }
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-seo-analysis.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-gpt.php';
 
 class B2Sell_SEO_Assistant {
     private $analysis;
+    private $gpt;
 
     public function __construct() {
         add_action( 'admin_menu', array( $this, 'register_menu' ) );
         $this->analysis = new B2Sell_SEO_Analysis();
+        $this->gpt      = new B2Sell_GPT_Generator();
     }
 
     public function register_menu() {
@@ -93,7 +96,7 @@ class B2Sell_SEO_Assistant {
     }
 
     public function gpt_page() {
-        $this->render_section( 'Generador de Contenido (GPT)' );
+        $this->gpt->render_admin_page();
     }
 
     public function sem_page() {
@@ -101,7 +104,23 @@ class B2Sell_SEO_Assistant {
     }
 
     public function config_page() {
-        $this->render_section( 'Configuración' );
+        $api_key = get_option( 'b2sell_openai_api_key', '' );
+        if ( isset( $_POST['b2sell_openai_api_key'] ) ) {
+            check_admin_referer( 'b2sell_save_api_key' );
+            $api_key = sanitize_text_field( $_POST['b2sell_openai_api_key'] );
+            update_option( 'b2sell_openai_api_key', $api_key );
+            echo '<div class="updated"><p>API Key guardada.</p></div>';
+        }
+        echo '<div class="wrap">';
+        echo '<h1>Configuración</h1>';
+        echo '<form method="post">';
+        wp_nonce_field( 'b2sell_save_api_key' );
+        echo '<label for="b2sell_openai_api_key">OpenAI API Key:</label> ';
+        echo '<input type="text" id="b2sell_openai_api_key" name="b2sell_openai_api_key" value="' . esc_attr( $api_key ) . '" style="width:400px;" />';
+        submit_button( 'Guardar API Key' );
+        echo '</form>';
+        echo '<p style="font-size:12px;color:#666;">Desarrollado por B2Sell SPA.</p>';
+        echo '</div>';
     }
 }
 
