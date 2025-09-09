@@ -186,20 +186,25 @@ class B2Sell_SEO_Assistant {
     }
 
     public function config_page() {
-        $api_key = get_option( 'b2sell_openai_api_key', '' );
-        if ( isset( $_POST['b2sell_openai_api_key'] ) ) {
+        $openai_key    = get_option( 'b2sell_openai_api_key', '' );
+        $pagespeed_key = get_option( 'b2sell_pagespeed_api_key', '' );
+        if ( isset( $_POST['b2sell_openai_api_key'] ) || isset( $_POST['b2sell_pagespeed_api_key'] ) ) {
             check_admin_referer( 'b2sell_save_api_key' );
-            $api_key = sanitize_text_field( $_POST['b2sell_openai_api_key'] );
-            update_option( 'b2sell_openai_api_key', $api_key );
-            echo '<div class="updated"><p>API Key guardada.</p></div>';
+            $openai_key    = sanitize_text_field( $_POST['b2sell_openai_api_key'] ?? '' );
+            $pagespeed_key = sanitize_text_field( $_POST['b2sell_pagespeed_api_key'] ?? '' );
+            update_option( 'b2sell_openai_api_key', $openai_key );
+            update_option( 'b2sell_pagespeed_api_key', $pagespeed_key );
+            echo '<div class="updated"><p>API Keys guardadas.</p></div>';
         }
         echo '<div class="wrap">';
         echo '<h1>Configuración</h1>';
         echo '<form method="post">';
         wp_nonce_field( 'b2sell_save_api_key' );
-        echo '<label for="b2sell_openai_api_key">OpenAI API Key:</label> ';
-        echo '<input type="text" id="b2sell_openai_api_key" name="b2sell_openai_api_key" value="' . esc_attr( $api_key ) . '" style="width:400px;" />';
-        submit_button( 'Guardar API Key' );
+        echo '<p><label for="b2sell_openai_api_key">OpenAI API Key:</label> ';
+        echo '<input type="text" id="b2sell_openai_api_key" name="b2sell_openai_api_key" value="' . esc_attr( $openai_key ) . '" style="width:400px;" /></p>';
+        echo '<p><label for="b2sell_pagespeed_api_key">Google PageSpeed API Key:</label> ';
+        echo '<input type="text" id="b2sell_pagespeed_api_key" name="b2sell_pagespeed_api_key" value="' . esc_attr( $pagespeed_key ) . '" style="width:400px;" /></p>';
+        submit_button( 'Guardar API Keys' );
         echo '</form>';
         echo '</div>';
     }
