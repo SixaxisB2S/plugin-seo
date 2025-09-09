@@ -23,6 +23,7 @@ class B2Sell_SEO_Assistant {
         add_action( 'admin_menu', array( $this, 'register_menu' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
         add_action( 'admin_footer', array( $this, 'render_footer' ) );
+        add_action( 'wp_ajax_b2sell_refresh_pagespeed', array( $this, 'ajax_refresh_pagespeed' ) );
         $this->analysis = new B2Sell_SEO_Analysis();
         $this->gpt      = new B2Sell_GPT_Generator();
         $this->sem      = new B2Sell_SEM_Campaigns();
@@ -95,44 +96,21 @@ class B2Sell_SEO_Assistant {
     public function dashboard_page() {
         if ( isset( $_GET['run'] ) && isset( $_GET['_wpnonce'] ) ) {
             if ( wp_verify_nonce( $_GET['_wpnonce'], 'b2sell_run_site_analysis' ) ) {
-                $this->analysis->run_full_site_analysis();
+                $cache = $this->analysis->run_full_site_analysis();
                 echo '<div class="updated"><p>Análisis global completado.</p></div>';
             }
         }
 
-        $posts = get_posts(
-            array(
-                'post_type'   => array( 'post', 'page' ),
-                'post_status' => 'publish',
-                'numberposts' => -1,
-            )
-        );
-
-        $total_onpage = 0;
-        $analyses     = array();
-        $recs         = array();
-        foreach ( $posts as $p ) {
-            $history = get_post_meta( $p->ID, '_b2sell_seo_history', true );
-            if ( is_array( $history ) && ! empty( $history ) ) {
-                $last        = end( $history );
-                $total_onpage += intval( $last['score'] );
-                $analyses[]  = $last;
-                if ( ! empty( $last['recommendations'] ) ) {
-                    $recs = array_merge( $recs, $last['recommendations'] );
-                }
-            }
+        if ( empty( $cache ) ) {
+            $cache = get_option( 'b2sell_seo_dashboard_cache', array() );
         }
-        $onpage_avg = $analyses ? round( $total_onpage / count( $analyses ) ) : 0;
 
-        $technical = $this->analysis->get_technical_summary();
-        $images    = $this->analysis->get_images_summary();
-
-        $global_score = round( $onpage_avg * 0.4 + $technical['score'] * 0.4 + $images['score'] * 0.2 );
-        $score_color  = ( $global_score >= 80 ) ? 'green' : ( ( $global_score >= 50 ) ? 'yellow' : 'red' );
-
-        $recs = array_merge( $recs, $technical['recommendations'], $images['recommendations'] );
-        $recs = array_unique( $recs );
-        $recs = array_slice( $recs, 0, 5 );
+        $onpage_avg   = $cache['onpage_avg'] ?? 0;
+        $technical    = $cache['technical'] ?? array( 'metrics' => array(), 'score' => 0 );
+        $images       = $cache['images'] ?? array( 'total' => 0, 'missing_alt' => 0, 'oversized' => 0 );
+        $global_score = $cache['global_score'] ?? 0;
+        $score_color  = $cache['score_color'] ?? 'red';
+        $recs         = $cache['recommendations'] ?? array();
 
         echo '<div class="wrap b2sell-dashboard">';
         echo '<h1>Dashboard SEO</h1>';
@@ -150,8 +128,9 @@ class B2Sell_SEO_Assistant {
         echo '<div class="b2sell-card">';
         echo '<h2>SEO Técnico</h2>';
         echo '<table class="widefat"><tbody>';
-        foreach ( $technical['metrics'] as $m ) {
-            echo '<tr class="b2sell-' . esc_attr( $m['color'] ) . '"><th>' . esc_html( $m['label'] ) . '</th><td>' . esc_html( $m['value'] ) . '</td></tr>';
+        foreach ( $technical['metrics'] as $key => $m ) {
+            $id = ( 'pagespeed' === $key ) ? ' id="b2sell-ps-row"' : '';
+            echo '<tr' . $id . ' class="b2sell-' . esc_attr( $m['color'] ) . '"><th>' . esc_html( $m['label'] ) . '</th><td>' . esc_html( $m['value'] ) . '</td></tr>';
         }
         echo '</tbody></table>';
         echo '</div>';
@@ -182,8 +161,10 @@ class B2Sell_SEO_Assistant {
 
         echo '</div>';
         $run_url = wp_nonce_url( admin_url( 'admin.php?page=b2sell-seo-assistant&run=1' ), 'b2sell_run_site_analysis' );
-        echo '<p><a class="button button-primary button-hero b2sell-analyze-button" href="' . esc_url( $run_url ) . '">Analizar todo el sitio</a></p>';
+        echo '<p><a class="button button-primary button-hero b2sell-analyze-button" href="' . esc_url( $run_url ) . '">Actualizar análisis</a></p>';
         echo '</div>';
+
+        echo '<script>jQuery(function($){$.post(ajaxurl,{action:"b2sell_refresh_pagespeed"},function(res){if(res.success){var r=$("#b2sell-ps-row");r.removeClass("b2sell-red b2sell-yellow b2sell-green").addClass("b2sell-"+res.data.color);r.find("td").text(res.data.score);}});});</script>';
     }
 
     public function analisis_page() {
@@ -227,6 +208,29 @@ class B2Sell_SEO_Assistant {
             return;
         }
         wp_enqueue_style( 'b2sell-seo-admin', plugin_dir_url( __FILE__ ) . 'assets/css/admin.css', array(), '1.0.0' );
+    }
+
+    public function ajax_refresh_pagespeed() {
+        $ps = $this->analysis->get_pagespeed_data( home_url() );
+        if ( $ps ) {
+            $color = ( $ps['score'] >= 80 ) ? 'green' : ( ( $ps['score'] >= 50 ) ? 'yellow' : 'red' );
+
+            $cache = get_option( 'b2sell_seo_dashboard_cache', array() );
+            if ( isset( $cache['technical']['metrics']['pagespeed'] ) ) {
+                $cache['technical']['metrics']['pagespeed']['value'] = $ps['score'];
+                $cache['technical']['metrics']['pagespeed']['color'] = $color;
+                update_option( 'b2sell_seo_dashboard_cache', $cache );
+            }
+
+            wp_send_json_success(
+                array(
+                    'score' => $ps['score'],
+                    'color' => $color,
+                )
+            );
+        }
+
+        wp_send_json_error();
     }
 
     public function render_footer() {
