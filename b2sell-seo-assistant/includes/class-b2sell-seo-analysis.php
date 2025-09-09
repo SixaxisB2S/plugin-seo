@@ -208,6 +208,79 @@ class B2Sell_SEO_Analysis {
                 </script>';
             }
 
+            // Image SEO analysis section.
+            $dom = new DOMDocument();
+            libxml_use_internal_errors( true );
+            $dom->loadHTML( '<meta http-equiv="content-type" content="text/html; charset=utf-8" />' . $post->post_content );
+            libxml_clear_errors();
+            $imgs = $dom->getElementsByTagName( 'img' );
+            $images = array();
+            foreach ( $imgs as $img ) {
+                $src   = $img->getAttribute( 'src' );
+                $alt   = $img->getAttribute( 'alt' );
+                $id    = attachment_url_to_postid( $src );
+                $size  = 0;
+                $width = 0;
+                $height = 0;
+                if ( $id ) {
+                    $path = get_attached_file( $id );
+                    if ( file_exists( $path ) ) {
+                        $size = filesize( $path );
+                        $meta = wp_get_attachment_metadata( $id );
+                        if ( $meta ) {
+                            $width  = $meta['width'] ?? 0;
+                            $height = $meta['height'] ?? 0;
+                        } else {
+                            $info = @getimagesize( $path );
+                            if ( $info ) {
+                                $width  = $info[0];
+                                $height = $info[1];
+                            }
+                        }
+                    }
+                }
+                $images[] = array(
+                    'src'    => $src,
+                    'alt'    => $alt,
+                    'size'   => $size,
+                    'width'  => $width,
+                    'height' => $height,
+                );
+            }
+            if ( ! empty( $images ) ) {
+                echo '<h2>SEO de Imágenes</h2>';
+                echo '<style>.b2sell-image-green{background:#cfc;} .b2sell-image-yellow{background:#ffc;} .b2sell-image-red{background:#fcc;} .b2sell-red{color:#c00;}</style>';
+                echo '<table class="widefat fixed"><thead><tr><th>Imagen</th><th>ALT actual</th><th>Sugerencia GPT</th><th>Tamaño/Dimensiones</th><th>Acción</th></tr></thead><tbody>';
+                foreach ( $images as $im ) {
+                    $size_text = $im['size'] ? size_format( $im['size'], 2 ) : '-';
+                    $dim_text  = $im['width'] && $im['height'] ? $im['width'] . 'x' . $im['height'] : '-';
+                    $oversize  = $im['size'] > 300 * 1024 || $im['width'] > 2000 || $im['height'] > 2000;
+                    if ( '' === $im['alt'] ) {
+                        $row_class = 'b2sell-image-red';
+                    } elseif ( $oversize ) {
+                        $row_class = 'b2sell-image-yellow';
+                    } else {
+                        $row_class = 'b2sell-image-green';
+                    }
+                    echo '<tr class="' . esc_attr( $row_class ) . '">';
+                    echo '<td><img src="' . esc_url( $im['src'] ) . '" style="max-width:100px;height:auto;" /></td>';
+                    echo '<td>' . esc_html( $im['alt'] ) . '</td>';
+                    echo '<td class="b2sell-gpt-suggestion"></td>';
+                    $size_cell = $oversize ? '<span class="b2sell-red">' . esc_html( $size_text . ' / ' . $dim_text ) . '</span><br/><em>Optimiza esta imagen para mejorar velocidad de carga</em>' : esc_html( $size_text . ' / ' . $dim_text );
+                    echo '<td>' . $size_cell . '</td>';
+                    if ( '' === $im['alt'] ) {
+                        $keyword = sanitize_title( basename( parse_url( $im['src'], PHP_URL_PATH ) ) );
+                        echo '<td><button class="button b2sell-gpt-image" data-src="' . esc_attr( $im['src'] ) . '" data-post="' . esc_attr( $post_id ) . '" data-keyword="' . esc_attr( $keyword ) . '">Sugerir ALT</button></td>';
+                    } else {
+                        echo '<td>-</td>';
+                    }
+                    echo '</tr>';
+                }
+                echo '</tbody></table>';
+                echo '<p><strong>Recomendaciones generales:</strong></p><ul><li>Usar nombres de archivo descriptivos.</li><li>Incluir siempre ALT.</li><li>Comprimir imágenes pesadas.</li><li>Usar formatos modernos (WebP).</li></ul>';
+                echo '<script>jQuery(function($){$(".b2sell-gpt-image").on("click",function(){const btn=$(this);const src=btn.data("src");const post=btn.data("post");const keyword=btn.data("keyword");const cell=btn.closest("tr").find(".b2sell-gpt-suggestion");cell.text("Generando...");$.post(ajaxurl,{action:"b2sell_gpt_generate",gpt_action:"alt",keyword:keyword,post_id:post,_wpnonce:b2sell_gpt_nonce},function(res){if(res.success){cell.html("<pre>"+res.data.content+"</pre><button class=\"button b2sell-gpt-copy\">Copiar</button> <button class=\"button b2sell-gpt-insert\" data-post=\""+post+"\" data-src=\""+src+"\">Insertar</button>");}else{cell.text(res.data.message||res.data);}});});$(document).on("click",".b2sell-gpt-copy",function(){navigator.clipboard.writeText($(this).prev("pre").text());});$(document).on("click",".b2sell-gpt-insert",function(){const btn=$(this);const post=btn.data("post");const src=btn.data("src");const content=btn.prev("pre").text();$.post(ajaxurl,{action:"b2sell_gpt_insert",gpt_action:"alt",post_id:post,content:content,image_src:src,_wpnonce:b2sell_gpt_nonce},function(res){alert(res.success?"ALT insertado":res.data);});});});</script>';
+            }
+
             $ps = $this->get_pagespeed_data( get_permalink( $post_id ) );
             if ( $ps ) {
                 echo '<h2>Velocidad y rendimiento</h2>';
