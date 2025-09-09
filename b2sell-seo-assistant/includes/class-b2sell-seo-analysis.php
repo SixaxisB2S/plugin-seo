@@ -1045,6 +1045,16 @@ class B2Sell_SEO_Analysis {
         );
     }
 
+    /**
+     * Retrieve historical results of global analyses.
+     *
+     * @return array
+     */
+    public function get_dashboard_history() {
+        $history = get_option( 'b2sell_seo_dashboard_history', array() );
+        return is_array( $history ) ? $history : array();
+    }
+
     public function run_full_site_analysis() {
         $posts = get_posts(
             array(
@@ -1114,6 +1124,21 @@ class B2Sell_SEO_Analysis {
             'recommendations' => $recs,
         );
         update_option( 'b2sell_seo_dashboard_cache', $cache );
+
+        // Store history of global analyses.
+        $history   = $this->get_dashboard_history();
+        $history[] = array(
+            'date'         => current_time( 'Y-m-d' ),
+            'global_score' => $global_score,
+            'onpage'       => $onpage_avg,
+            'technical'    => $technical['score'],
+            'images'       => $images['score'],
+        );
+        // Keep only the latest 50 entries to avoid unlimited growth.
+        if ( count( $history ) > 50 ) {
+            $history = array_slice( $history, -50 );
+        }
+        update_option( 'b2sell_seo_dashboard_history', $history );
 
         return $cache;
     }
