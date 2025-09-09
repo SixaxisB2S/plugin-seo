@@ -13,11 +13,13 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-seo-analysis.p
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-gpt.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-sem.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-editor-metabox.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-competencia.php';
 
 class B2Sell_SEO_Assistant {
     private $analysis;
     private $gpt;
     private $sem;
+    private $competencia;
 
     public function __construct() {
         add_action( 'admin_menu', array( $this, 'register_menu' ) );
@@ -27,6 +29,7 @@ class B2Sell_SEO_Assistant {
         $this->analysis = new B2Sell_SEO_Analysis();
         $this->gpt      = new B2Sell_GPT_Generator();
         $this->sem      = new B2Sell_SEM_Campaigns();
+        $this->competencia = new B2Sell_Competencia();
     }
 
     public function register_menu() {
@@ -73,6 +76,15 @@ class B2Sell_SEO_Assistant {
             'manage_options',
             'b2sell-seo-campanas',
             array( $this, 'sem_page' )
+        );
+
+        add_submenu_page(
+            'b2sell-seo-assistant',
+            'Competencia',
+            'Competencia',
+            'manage_options',
+            'b2sell-seo-competencia',
+            array( $this, 'competencia_page' )
         );
 
         add_submenu_page(
@@ -196,15 +208,25 @@ class B2Sell_SEO_Assistant {
         $this->sem->render_admin_page();
     }
 
+    public function competencia_page() {
+        $this->competencia->render_admin_page();
+    }
+
     public function config_page() {
-        $openai_key    = get_option( 'b2sell_openai_api_key', '' );
+        $openai_key   = get_option( 'b2sell_openai_api_key', '' );
         $pagespeed_key = get_option( 'b2sell_pagespeed_api_key', '' );
-        if ( isset( $_POST['b2sell_openai_api_key'] ) || isset( $_POST['b2sell_pagespeed_api_key'] ) ) {
+        $google_key    = get_option( 'b2sell_google_api_key', '' );
+        $google_cx     = get_option( 'b2sell_google_cx', '' );
+        if ( isset( $_POST['b2sell_openai_api_key'] ) || isset( $_POST['b2sell_pagespeed_api_key'] ) || isset( $_POST['b2sell_google_api_key'] ) || isset( $_POST['b2sell_google_cx'] ) ) {
             check_admin_referer( 'b2sell_save_api_key' );
             $openai_key    = sanitize_text_field( $_POST['b2sell_openai_api_key'] ?? '' );
             $pagespeed_key = sanitize_text_field( $_POST['b2sell_pagespeed_api_key'] ?? '' );
+            $google_key    = sanitize_text_field( $_POST['b2sell_google_api_key'] ?? '' );
+            $google_cx     = sanitize_text_field( $_POST['b2sell_google_cx'] ?? '' );
             update_option( 'b2sell_openai_api_key', $openai_key );
             update_option( 'b2sell_pagespeed_api_key', $pagespeed_key );
+            update_option( 'b2sell_google_api_key', $google_key );
+            update_option( 'b2sell_google_cx', $google_cx );
             echo '<div class="updated"><p>API Keys guardadas.</p></div>';
         }
         echo '<div class="wrap">';
@@ -215,6 +237,10 @@ class B2Sell_SEO_Assistant {
         echo '<input type="text" id="b2sell_openai_api_key" name="b2sell_openai_api_key" value="' . esc_attr( $openai_key ) . '" style="width:400px;" /></p>';
         echo '<p><label for="b2sell_pagespeed_api_key">Google PageSpeed API Key:</label> ';
         echo '<input type="text" id="b2sell_pagespeed_api_key" name="b2sell_pagespeed_api_key" value="' . esc_attr( $pagespeed_key ) . '" style="width:400px;" /></p>';
+        echo '<p><label for="b2sell_google_api_key">Google Custom Search API Key:</label> ';
+        echo '<input type="text" id="b2sell_google_api_key" name="b2sell_google_api_key" value="' . esc_attr( $google_key ) . '" style="width:400px;" /></p>';
+        echo '<p><label for="b2sell_google_cx">ID del motor de búsqueda (CX):</label> ';
+        echo '<input type="text" id="b2sell_google_cx" name="b2sell_google_cx" value="' . esc_attr( $google_cx ) . '" style="width:400px;" /></p>';
         submit_button( 'Guardar API Keys' );
         echo '</form>';
         echo '</div>';
