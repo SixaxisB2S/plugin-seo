@@ -215,20 +215,35 @@ class B2Sell_SEO_Assistant {
     }
 
     public function config_page() {
-        $openai_key   = get_option( 'b2sell_openai_api_key', '' );
+        $openai_key    = get_option( 'b2sell_openai_api_key', '' );
         $pagespeed_key = get_option( 'b2sell_pagespeed_api_key', '' );
         $google_key    = get_option( 'b2sell_google_api_key', '' );
         $google_cx     = get_option( 'b2sell_google_cx', '' );
-        if ( isset( $_POST['b2sell_openai_api_key'] ) || isset( $_POST['b2sell_pagespeed_api_key'] ) || isset( $_POST['b2sell_google_api_key'] ) || isset( $_POST['b2sell_google_cx'] ) ) {
+        $ads_dev       = get_option( 'b2sell_ads_developer_token', '' );
+        $ads_client    = get_option( 'b2sell_ads_client_id', '' );
+        $ads_secret    = get_option( 'b2sell_ads_client_secret', '' );
+        $ads_refresh   = get_option( 'b2sell_ads_refresh_token', '' );
+        $ads_customer  = get_option( 'b2sell_ads_customer_id', '' );
+        if ( isset( $_POST['b2sell_openai_api_key'] ) || isset( $_POST['b2sell_pagespeed_api_key'] ) || isset( $_POST['b2sell_google_api_key'] ) || isset( $_POST['b2sell_google_cx'] ) || isset( $_POST['b2sell_ads_developer_token'] ) ) {
             check_admin_referer( 'b2sell_save_api_key' );
             $openai_key    = sanitize_text_field( $_POST['b2sell_openai_api_key'] ?? '' );
             $pagespeed_key = sanitize_text_field( $_POST['b2sell_pagespeed_api_key'] ?? '' );
             $google_key    = sanitize_text_field( $_POST['b2sell_google_api_key'] ?? '' );
             $google_cx     = sanitize_text_field( $_POST['b2sell_google_cx'] ?? '' );
+            $ads_dev       = sanitize_text_field( $_POST['b2sell_ads_developer_token'] ?? '' );
+            $ads_client    = sanitize_text_field( $_POST['b2sell_ads_client_id'] ?? '' );
+            $ads_secret    = sanitize_text_field( $_POST['b2sell_ads_client_secret'] ?? '' );
+            $ads_refresh   = sanitize_text_field( $_POST['b2sell_ads_refresh_token'] ?? '' );
+            $ads_customer  = sanitize_text_field( $_POST['b2sell_ads_customer_id'] ?? '' );
             update_option( 'b2sell_openai_api_key', $openai_key );
             update_option( 'b2sell_pagespeed_api_key', $pagespeed_key );
             update_option( 'b2sell_google_api_key', $google_key );
             update_option( 'b2sell_google_cx', $google_cx );
+            update_option( 'b2sell_ads_developer_token', $ads_dev );
+            update_option( 'b2sell_ads_client_id', $ads_client );
+            update_option( 'b2sell_ads_client_secret', $ads_secret );
+            update_option( 'b2sell_ads_refresh_token', $ads_refresh );
+            update_option( 'b2sell_ads_customer_id', $ads_customer );
             echo '<div class="updated"><p>API Keys guardadas.</p></div>';
         }
         echo '<div class="wrap">';
@@ -243,6 +258,17 @@ class B2Sell_SEO_Assistant {
         echo '<input type="text" id="b2sell_google_api_key" name="b2sell_google_api_key" value="' . esc_attr( $google_key ) . '" style="width:400px;" /></p>';
         echo '<p><label for="b2sell_google_cx">ID del motor de búsqueda (CX):</label> ';
         echo '<input type="text" id="b2sell_google_cx" name="b2sell_google_cx" value="' . esc_attr( $google_cx ) . '" style="width:400px;" /></p>';
+        echo '<h2>Google Ads Keyword Planner</h2>';
+        echo '<p><label for="b2sell_ads_developer_token">Developer Token:</label> ';
+        echo '<input type="text" id="b2sell_ads_developer_token" name="b2sell_ads_developer_token" value="' . esc_attr( $ads_dev ) . '" style="width:400px;" /></p>';
+        echo '<p><label for="b2sell_ads_client_id">Client ID:</label> ';
+        echo '<input type="text" id="b2sell_ads_client_id" name="b2sell_ads_client_id" value="' . esc_attr( $ads_client ) . '" style="width:400px;" /></p>';
+        echo '<p><label for="b2sell_ads_client_secret">Client Secret:</label> ';
+        echo '<input type="text" id="b2sell_ads_client_secret" name="b2sell_ads_client_secret" value="' . esc_attr( $ads_secret ) . '" style="width:400px;" /></p>';
+        echo '<p><label for="b2sell_ads_refresh_token">Refresh Token:</label> ';
+        echo '<input type="text" id="b2sell_ads_refresh_token" name="b2sell_ads_refresh_token" value="' . esc_attr( $ads_refresh ) . '" style="width:400px;" /></p>';
+        echo '<p><label for="b2sell_ads_customer_id">Customer ID:</label> ';
+        echo '<input type="text" id="b2sell_ads_customer_id" name="b2sell_ads_customer_id" value="' . esc_attr( $ads_customer ) . '" style="width:400px;" /></p>';
         submit_button( 'Guardar API Keys' );
         echo '</form>';
         echo '</div>';
