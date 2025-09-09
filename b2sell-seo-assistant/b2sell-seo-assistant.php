@@ -105,6 +105,7 @@ class B2Sell_SEO_Assistant {
             $cache = get_option( 'b2sell_seo_dashboard_cache', array() );
         }
 
+        $history      = $this->analysis->get_dashboard_history();
         $onpage_avg   = $cache['onpage_avg'] ?? 0;
         $technical    = $cache['technical'] ?? array( 'metrics' => array(), 'score' => 0 );
         $images       = $cache['images'] ?? array( 'total' => 0, 'missing_alt' => 0, 'oversized' => 0 );
@@ -160,11 +161,27 @@ class B2Sell_SEO_Assistant {
         echo '</div>';
 
         echo '</div>';
+
+        if ( $history ) {
+            echo '<h2>Histórico de análisis</h2>';
+            echo '<canvas id="b2sell-history-chart" height="100"></canvas>';
+            echo '<table class="widefat" style="margin-top:20px"><thead><tr><th>Fecha</th><th>Puntaje Global</th><th>On-page</th><th>Técnico</th><th>Imágenes</th></tr></thead><tbody>';
+            foreach ( array_reverse( $history ) as $h ) {
+                echo '<tr><td>' . esc_html( $h['date'] ) . '</td><td>' . esc_html( $h['global_score'] ) . '</td><td>' . esc_html( $h['onpage'] ) . '</td><td>' . esc_html( $h['technical'] ) . '</td><td>' . esc_html( $h['images'] ) . '</td></tr>';
+            }
+            echo '</tbody></table>';
+        }
+
         $run_url = wp_nonce_url( admin_url( 'admin.php?page=b2sell-seo-assistant&run=1' ), 'b2sell_run_site_analysis' );
         echo '<p><a class="button button-primary button-hero b2sell-analyze-button" href="' . esc_url( $run_url ) . '">Actualizar análisis</a></p>';
         echo '</div>';
 
-        echo '<script>jQuery(function($){$.post(ajaxurl,{action:"b2sell_refresh_pagespeed"},function(res){if(res.success){var r=$("#b2sell-ps-row");r.removeClass("b2sell-red b2sell-yellow b2sell-green").addClass("b2sell-"+res.data.color);r.find("td").text(res.data.score);}});});</script>';
+        $chart_data = array_slice( $history, -10 );
+        $labels     = wp_json_encode( wp_list_pluck( $chart_data, 'date' ) );
+        $scores     = wp_json_encode( array_map( 'intval', wp_list_pluck( $chart_data, 'global_score' ) ) );
+
+        echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
+        echo '<script>jQuery(function($){$.post(ajaxurl,{action:"b2sell_refresh_pagespeed"},function(res){if(res.success){var r=$("#b2sell-ps-row");r.removeClass("b2sell-red b2sell-yellow b2sell-green").addClass("b2sell-"+res.data.color);r.find("td").text(res.data.score);}});});var ctx=document.getElementById("b2sell-history-chart");if(ctx){new Chart(ctx.getContext("2d"),{type:"line",data:{labels:' . $labels . ',datasets:[{label:"Puntaje SEO Global",data:' . $scores . ',borderColor:"#0073aa",fill:false}]},options:{scales:{y:{beginAtZero:true,max:100}}}});}</script>';
     }
 
     public function analisis_page() {
