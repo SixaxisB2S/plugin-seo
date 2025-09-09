@@ -8,6 +8,8 @@ class B2Sell_SEO_Analysis {
     public function render_admin_page() {
         if ( isset( $_GET['post_id'] ) ) {
             $this->render_analysis( intval( $_GET['post_id'] ) );
+        } elseif ( isset( $_GET['technical'] ) ) {
+            $this->render_technical();
         } else {
             $this->render_list();
         }
@@ -79,6 +81,8 @@ class B2Sell_SEO_Analysis {
         echo '</select> ';
         submit_button( 'Filtrar', '', '', false );
         echo '</form>';
+
+        echo '<p><a class="button" href="' . esc_url( admin_url( 'admin.php?page=b2sell-seo-analisis&technical=1' ) ) . '">SEO Técnico</a></p>';
 
         echo '<p><button id="b2sell-export-csv" class="button">Exportar CSV</button> ';
         echo '<button id="b2sell-export-pdf" class="button">Exportar PDF</button></p>';
@@ -207,6 +211,192 @@ class B2Sell_SEO_Analysis {
 
         echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=b2sell-seo-analisis' ) ) . '">Volver al listado</a></p>';
         echo '</div>';
+    }
+
+    private function render_technical() {
+        $results = $this->perform_technical_analysis();
+
+        echo '<div class="wrap">';
+        echo '<h1>SEO Técnico</h1>';
+        echo '<style>.b2sell-seo-green{color:#090;} .b2sell-seo-yellow{color:#e6a700;} .b2sell-seo-red{color:#c00;}</style>';
+        echo '<table class="widefat fixed"><tbody>';
+        foreach ( $results['metrics'] as $label => $data ) {
+            echo '<tr><th>' . esc_html( $label ) . '</th><td class="b2sell-seo-' . esc_attr( $data['color'] ) . '">' . esc_html( $data['value'] ) . '</td></tr>';
+            if ( ! empty( $data['detail'] ) ) {
+                echo '<tr><td colspan="2">' . esc_html( $data['detail'] ) . '</td></tr>';
+            }
+            if ( ! empty( $data['recommendation'] ) ) {
+                echo '<tr><td colspan="2"><em>' . esc_html( $data['recommendation'] ) . '</em></td></tr>';
+            }
+        }
+        echo '</tbody></table>';
+
+        if ( ! empty( $results['broken_links'] ) ) {
+            echo '<div class="notice notice-warning"><p>Enlaces rotos detectados:</p><ul>';
+            foreach ( $results['broken_links'] as $url ) {
+                echo '<li>' . esc_html( $url ) . '</li>';
+            }
+            echo '</ul></div>';
+        }
+
+        echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=b2sell-seo-analisis' ) ) . '">Volver al listado</a></p>';
+        echo '</div>';
+    }
+
+    private function perform_technical_analysis() {
+        $metrics       = array();
+        $broken_links  = array();
+
+        // robots.txt
+        $robots_resp = wp_remote_get( home_url( '/robots.txt' ) );
+        if ( ! is_wp_error( $robots_resp ) && 200 === wp_remote_retrieve_response_code( $robots_resp ) ) {
+            $body   = strtolower( wp_remote_retrieve_body( $robots_resp ) );
+            $lines  = preg_split( '/\r?\n/', $body );
+            $ua     = '';
+            $blocked = false;
+            foreach ( $lines as $line ) {
+                $line = trim( $line );
+                if ( 0 === strpos( $line, 'user-agent:' ) ) {
+                    $ua = trim( substr( $line, 11 ) );
+                } elseif ( ( '*' === $ua || 'googlebot' === $ua ) && 0 === strpos( $line, 'disallow:' ) ) {
+                    $path = trim( substr( $line, 9 ) );
+                    if ( '/' === $path ) {
+                        $blocked = true;
+                        break;
+                    }
+                }
+            }
+            if ( $blocked ) {
+                $metrics['robots.txt'] = array(
+                    'value'         => 'Bloquea Googlebot',
+                    'color'         => 'yellow',
+                    'recommendation'=> 'Permitir el rastreo de Googlebot.',
+                );
+            } else {
+                $metrics['robots.txt'] = array(
+                    'value' => 'Permite Googlebot',
+                    'color' => 'green',
+                );
+            }
+        } else {
+            $metrics['robots.txt'] = array(
+                'value'         => 'No encontrado',
+                'color'         => 'red',
+                'recommendation'=> 'Crear un archivo robots.txt.',
+            );
+        }
+
+        // sitemap.xml
+        $sitemap_resp = wp_remote_get( home_url( '/sitemap.xml' ) );
+        if ( ! is_wp_error( $sitemap_resp ) && 200 === wp_remote_retrieve_response_code( $sitemap_resp ) ) {
+            $body = wp_remote_retrieve_body( $sitemap_resp );
+            if ( false !== strpos( $body, '<urlset' ) || false !== strpos( $body, '<sitemapindex' ) ) {
+                $metrics['sitemap.xml'] = array(
+                    'value' => 'Válido',
+                    'color' => 'green',
+                );
+            } else {
+                $metrics['sitemap.xml'] = array(
+                    'value'         => 'Formato inválido',
+                    'color'         => 'yellow',
+                    'recommendation'=> 'Revisar el formato del sitemap.',
+                );
+            }
+        } else {
+            $metrics['sitemap.xml'] = array(
+                'value'         => 'No encontrado',
+                'color'         => 'red',
+                'recommendation'=> 'Crear un sitemap.xml.',
+            );
+        }
+
+        // Canonical tags
+        $posts        = get_posts(
+            array(
+                'post_type'   => array( 'post', 'page' ),
+                'post_status' => 'publish',
+                'numberposts' => -1,
+            )
+        );
+        $canon_errors = array();
+        foreach ( $posts as $p ) {
+            $url  = get_permalink( $p->ID );
+            $resp = wp_remote_get( $url );
+            if ( is_wp_error( $resp ) || 200 !== wp_remote_retrieve_response_code( $resp ) ) {
+                continue;
+            }
+            $body = wp_remote_retrieve_body( $resp );
+            if ( preg_match( '/<link\s+rel=["\']canonical["\']\s+href=["\']([^"\']+)["\']/i', $body, $m ) ) {
+                $href = $m[1];
+                if ( ! filter_var( $href, FILTER_VALIDATE_URL ) || untrailingslashit( $href ) !== untrailingslashit( $url ) ) {
+                    $canon_errors[] = $p->post_title . ' -> ' . $href;
+                }
+            } else {
+                $canon_errors[] = $p->post_title . ' (sin canonical)';
+            }
+        }
+        if ( empty( $canon_errors ) ) {
+            $metrics['Etiquetas canonical'] = array(
+                'value' => 'Correctas',
+                'color' => 'green',
+            );
+        } else {
+            $metrics['Etiquetas canonical'] = array(
+                'value'         => count( $canon_errors ) . ' problemas',
+                'color'         => 'red',
+                'detail'        => implode( ', ', $canon_errors ),
+                'recommendation'=> 'Revisar las páginas listadas.',
+            );
+        }
+
+        // Broken links
+        $checked = array();
+        foreach ( $posts as $p ) {
+            $resp = wp_remote_get( get_permalink( $p->ID ) );
+            if ( is_wp_error( $resp ) ) {
+                continue;
+            }
+            $body = wp_remote_retrieve_body( $resp );
+            if ( preg_match_all( '/<a[^>]+href=["\']([^"\']+)["\']/i', $body, $matches ) ) {
+                foreach ( $matches[1] as $link ) {
+                    $link = trim( $link );
+                    if ( '' === $link || 0 === strpos( $link, '#' ) ) {
+                        continue;
+                    }
+                    if ( isset( $checked[ $link ] ) ) {
+                        continue;
+                    }
+                    $head = wp_remote_head( $link, array( 'timeout' => 5 ) );
+                    if ( is_wp_error( $head ) ) {
+                        continue;
+                    }
+                    $code = wp_remote_retrieve_response_code( $head );
+                    if ( 404 === intval( $code ) ) {
+                        $broken_links[]   = $link;
+                        $checked[ $link ] = false;
+                    } else {
+                        $checked[ $link ] = true;
+                    }
+                }
+            }
+        }
+        if ( empty( $broken_links ) ) {
+            $metrics['Enlaces rotos'] = array(
+                'value' => 'Sin enlaces rotos',
+                'color' => 'green',
+            );
+        } else {
+            $metrics['Enlaces rotos'] = array(
+                'value'         => count( $broken_links ) . ' enlaces con error',
+                'color'         => 'red',
+                'recommendation'=> 'Corregir los enlaces listados.',
+            );
+        }
+
+        return array(
+            'metrics'      => $metrics,
+            'broken_links' => $broken_links,
+        );
     }
 
     private function perform_analysis( $post_id, $keyword ) {
