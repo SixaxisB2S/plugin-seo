@@ -207,6 +207,36 @@ class B2Sell_SEO_Analysis {
                 });
                 </script>';
             }
+
+            $ps = $this->get_pagespeed_data( get_permalink( $post_id ) );
+            if ( $ps ) {
+                echo '<h2>Velocidad y rendimiento</h2>';
+                echo '<div class="b2sell-speed-wrapper">';
+                echo '<canvas id="b2sell-speed-score" width="200" height="120"></canvas>';
+                echo '<canvas id="b2sell-speed-bars" height="120"></canvas>';
+                echo '<ul>';
+                echo '<li>Performance score: <span style="color:' . esc_attr( $ps['score_color'] ) . ';">' . esc_html( $ps['score'] ) . '</span></li>';
+                echo '<li>TTFB: <span style="color:' . esc_attr( $ps['ttfb_color'] ) . ';">' . esc_html( $ps['ttfb'] ) . ' ms</span></li>';
+                echo '<li>LCP: <span style="color:' . esc_attr( $ps['lcp_color'] ) . ';">' . esc_html( $ps['lcp'] ) . ' ms</span></li>';
+                echo '<li>CLS: <span style="color:' . esc_attr( $ps['cls_color'] ) . ';">' . esc_html( $ps['cls'] ) . '</span></li>';
+                echo '<li>' . esc_html( $ps['inter_label'] ) . ': <span style="color:' . esc_attr( $ps['inter_color'] ) . ';">' . esc_html( $ps['inter'] ) . ' ms</span></li>';
+                echo '</ul>';
+                if ( ! empty( $ps['recommendations'] ) ) {
+                    echo '<h3>Recomendaciones de velocidad</h3><ul>';
+                    foreach ( $ps['recommendations'] as $r ) {
+                        echo '<li>' . esc_html( $r ) . '</li>';
+                    }
+                    echo '</ul>';
+                }
+                echo '</div>';
+                echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
+                echo '<script>';
+                echo 'var ctxGauge=document.getElementById("b2sell-speed-score").getContext("2d");';
+                echo 'new Chart(ctxGauge,{type:"doughnut",data:{datasets:[{data:[' . esc_js( $ps['score'] ) . ',' . esc_js( 100 - $ps['score'] ) . '],backgroundColor:["' . esc_js( $ps['score_color'] ) . '","#eee"],borderWidth:0,circumference:180,rotation:270}]},options:{plugins:{legend:false},cutout:"70%"}});';
+                echo 'var ctxBar=document.getElementById("b2sell-speed-bars").getContext("2d");';
+                echo 'new Chart(ctxBar,{type:"bar",data:{labels:["TTFB","LCP","CLS","' . esc_js( $ps['inter_label'] ) . '"],datasets:[{data:[' . esc_js( $ps['ttfb'] ) . ',' . esc_js( $ps['lcp'] ) . ',' . esc_js( $ps['cls'] ) . ',' . esc_js( $ps['inter'] ) . '],backgroundColor:["' . esc_js( $ps['ttfb_color'] ) . '","' . esc_js( $ps['lcp_color'] ) . '","' . esc_js( $ps['cls_color'] ) . '","' . esc_js( $ps['inter_color'] ) . '"]}]},options:{scales:{y:{beginAtZero:true}}}});';
+                echo '</script>';
+            }
         }
 
         echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=b2sell-seo-analisis' ) ) . '">Volver al listado</a></p>';
@@ -705,6 +735,92 @@ class B2Sell_SEO_Analysis {
             'metrics'          => $metrics,
             'recommendations'  => $recs,
         );
+    }
+
+    private function get_pagespeed_data( $url ) {
+        $api_key = get_option( 'b2sell_pagespeed_api_key', '' );
+        $api_url = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=' . rawurlencode( $url ) . '&strategy=mobile';
+        if ( $api_key ) {
+            $api_url .= '&key=' . $api_key;
+        }
+        $response = wp_remote_get( $api_url, array( 'timeout' => 30 ) );
+        if ( is_wp_error( $response ) ) {
+            return false;
+        }
+        $data = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( ! is_array( $data ) || empty( $data['lighthouseResult'] ) ) {
+            return false;
+        }
+        $lh     = $data['lighthouseResult'];
+        $audits = $lh['audits'];
+        $score  = isset( $lh['categories']['performance']['score'] ) ? intval( $lh['categories']['performance']['score'] * 100 ) : 0;
+        $score_color = $this->color_high( $score, 90, 50 );
+        $ttfb   = isset( $audits['server-response-time']['numericValue'] ) ? round( $audits['server-response-time']['numericValue'] ) : 0;
+        $ttfb_color = $this->color_low( $ttfb, 200, 600 );
+        $lcp    = isset( $audits['largest-contentful-paint']['numericValue'] ) ? round( $audits['largest-contentful-paint']['numericValue'] ) : 0;
+        $lcp_color = $this->color_low( $lcp, 2500, 4000 );
+        $cls    = isset( $audits['cumulative-layout-shift']['numericValue'] ) ? round( $audits['cumulative-layout-shift']['numericValue'], 2 ) : 0;
+        $cls_color = $this->color_low( $cls, 0.1, 0.25 );
+        $field  = $data['loadingExperience']['metrics'] ?? array();
+        if ( isset( $field['INTERACTION_TO_NEXT_PAINT']['percentile'] ) ) {
+            $inter       = round( $field['INTERACTION_TO_NEXT_PAINT']['percentile'] );
+            $inter_label = 'INP';
+            $inter_color = $this->color_low( $inter, 200, 500 );
+        } else {
+            $inter       = isset( $field['FIRST_INPUT_DELAY_MS']['percentile'] ) ? round( $field['FIRST_INPUT_DELAY_MS']['percentile'] ) : 0;
+            $inter_label = 'FID';
+            $inter_color = $this->color_low( $inter, 100, 300 );
+        }
+        $recs = array();
+        if ( $score < 90 ) {
+            $recs[] = 'Mejora el rendimiento general para incrementar el puntaje de performance.';
+        }
+        if ( $ttfb > 600 ) {
+            $recs[] = 'Reduce el tiempo de respuesta del servidor (TTFB).';
+        }
+        if ( $lcp > 4000 ) {
+            $recs[] = 'Optimiza imágenes grandes para mejorar el LCP.';
+        }
+        if ( $cls > 0.25 ) {
+            $recs[] = 'Evita cambios de diseño inesperados para reducir el CLS.';
+        }
+        if ( ( 'INP' === $inter_label && $inter > 500 ) || ( 'FID' === $inter_label && $inter > 300 ) ) {
+            $recs[] = 'Reduce JavaScript bloqueante para mejorar la interactividad.';
+        }
+        return array(
+            'score'          => $score,
+            'score_color'    => $score_color,
+            'ttfb'           => $ttfb,
+            'ttfb_color'     => $ttfb_color,
+            'lcp'            => $lcp,
+            'lcp_color'      => $lcp_color,
+            'cls'            => $cls,
+            'cls_color'      => $cls_color,
+            'inter'          => $inter,
+            'inter_color'    => $inter_color,
+            'inter_label'    => $inter_label,
+            'recommendations'=> $recs,
+        );
+    }
+
+    private function color_low( $value, $good, $ok ) {
+        if ( $value <= $good ) {
+            return '#090';
+        }
+        if ( $value <= $ok ) {
+            return '#e6a700';
+        }
+        return '#c00';
+    }
+
+    private function color_high( $value, $good, $ok ) {
+        if ( $value >= $good ) {
+            return '#090';
+        }
+        if ( $value >= $ok ) {
+            return '#e6a700';
+        }
+        return '#c00';
     }
 
     private function flesch_reading_ease( $text ) {
