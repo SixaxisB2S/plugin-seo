@@ -1053,8 +1053,14 @@ class B2Sell_SEO_Analysis {
                 'numberposts' => -1,
             )
         );
+
+        $total_onpage = 0;
+        $analyses     = 0;
+        $recs         = array();
+
         foreach ( $posts as $p ) {
             $result = $this->perform_analysis( $p->ID, '' );
+
             $history = get_post_meta( $p->ID, '_b2sell_seo_history', true );
             if ( ! is_array( $history ) ) {
                 $history = array();
@@ -1070,6 +1076,45 @@ class B2Sell_SEO_Analysis {
                 ),
             );
             update_post_meta( $p->ID, '_b2sell_seo_history', $history );
+
+            $total_onpage += intval( $result['score'] );
+            $analyses++;
+            if ( ! empty( $result['recommendations'] ) ) {
+                $recs = array_merge(
+                    $recs,
+                    array_map(
+                        function( $r ) {
+                            return $r['message'];
+                        },
+                        $result['recommendations']
+                    )
+                );
+            }
         }
+
+        $onpage_avg = $analyses ? round( $total_onpage / $analyses ) : 0;
+
+        $technical = $this->get_technical_summary();
+        $images    = $this->get_images_summary();
+
+        $recs = array_merge( $recs, $technical['recommendations'], $images['recommendations'] );
+        $recs = array_unique( $recs );
+        $recs = array_slice( $recs, 0, 5 );
+
+        $global_score = round( $onpage_avg * 0.4 + $technical['score'] * 0.4 + $images['score'] * 0.2 );
+        $score_color  = ( $global_score >= 80 ) ? 'green' : ( ( $global_score >= 50 ) ? 'yellow' : 'red' );
+
+        $cache = array(
+            'timestamp'       => current_time( 'mysql' ),
+            'onpage_avg'      => $onpage_avg,
+            'technical'       => $technical,
+            'images'          => $images,
+            'global_score'    => $global_score,
+            'score_color'     => $score_color,
+            'recommendations' => $recs,
+        );
+        update_option( 'b2sell_seo_dashboard_cache', $cache );
+
+        return $cache;
     }
 }
