@@ -906,4 +906,169 @@ class B2Sell_SEO_Analysis {
         $sentences = max( 1, $sentences );
         return 206.835 - ( 1.015 * ( $words / $sentences ) ) - ( 84.6 * ( $syllables / $words ) );
     }
+
+    public function get_technical_summary() {
+        $results = $this->perform_technical_analysis();
+
+        $recs        = array();
+        $score_total = 0;
+        $count       = 0;
+        foreach ( $results['metrics'] as $metric ) {
+            $count++;
+            $score_total += ( 'green' === $metric['color'] ) ? 100 : ( ( 'yellow' === $metric['color'] ) ? 50 : 0 );
+            if ( ! empty( $metric['recommendation'] ) ) {
+                $recs[] = $metric['recommendation'];
+            }
+        }
+
+        $ps_score = 0;
+        $ps_color = 'red';
+        $ps       = $this->get_pagespeed_data( home_url() );
+        if ( $ps ) {
+            $ps_score   = $ps['score'];
+            $ps_color   = ( $ps_score >= 80 ) ? 'green' : ( ( $ps_score >= 50 ) ? 'yellow' : 'red' );
+            $count++;
+            $score_total += ( 'green' === $ps_color ) ? 100 : ( ( 'yellow' === $ps_color ) ? 50 : 0 );
+            if ( ! empty( $ps['recommendations'] ) ) {
+                $recs = array_merge( $recs, $ps['recommendations'] );
+            }
+        }
+
+        $broken_count = count( $results['broken_links'] );
+        if ( $broken_count ) {
+            $recs[] = 'Se detectaron ' . $broken_count . ' enlaces rotos.';
+        }
+
+        $score = $count ? round( $score_total / $count ) : 0;
+
+        $metrics = array(
+            'robots'   => array(
+                'label' => 'robots.txt',
+                'value' => $results['metrics']['robots.txt']['value'],
+                'color' => $results['metrics']['robots.txt']['color'],
+            ),
+            'sitemap'  => array(
+                'label' => 'sitemap.xml',
+                'value' => $results['metrics']['sitemap.xml']['value'],
+                'color' => $results['metrics']['sitemap.xml']['color'],
+            ),
+            'pagespeed'=> array(
+                'label' => 'PageSpeed score',
+                'value' => $ps_score,
+                'color' => $ps_color,
+            ),
+            'broken'   => array(
+                'label' => 'Enlaces rotos',
+                'value' => $broken_count,
+                'color' => $broken_count ? 'red' : 'green',
+            ),
+        );
+
+        return array(
+            'score'           => $score,
+            'metrics'         => $metrics,
+            'recommendations' => $recs,
+        );
+    }
+
+    public function get_images_summary() {
+        $posts        = get_posts(
+            array(
+                'post_type'   => array( 'post', 'page' ),
+                'post_status' => 'publish',
+                'numberposts' => -1,
+            )
+        );
+
+        $total   = 0;
+        $missing = 0;
+        $heavy   = 0;
+        foreach ( $posts as $p ) {
+            $dom = new DOMDocument();
+            libxml_use_internal_errors( true );
+            $dom->loadHTML( '<meta http-equiv="content-type" content="text/html; charset=utf-8" />' . $p->post_content );
+            libxml_clear_errors();
+            $imgs = $dom->getElementsByTagName( 'img' );
+            foreach ( $imgs as $img ) {
+                $total++;
+                $alt = $img->getAttribute( 'alt' );
+                if ( '' === trim( $alt ) ) {
+                    $missing++;
+                }
+                $src = $img->getAttribute( 'src' );
+                $id  = attachment_url_to_postid( $src );
+                $size = 0;
+                $width = 0;
+                $height = 0;
+                if ( $id ) {
+                    $path = get_attached_file( $id );
+                    if ( $path && file_exists( $path ) ) {
+                        $size = filesize( $path );
+                        $meta = wp_get_attachment_metadata( $id );
+                        if ( $meta ) {
+                            $width  = $meta['width'] ?? 0;
+                            $height = $meta['height'] ?? 0;
+                        } else {
+                            $info = @getimagesize( $path );
+                            if ( $info ) {
+                                $width  = $info[0];
+                                $height = $info[1];
+                            }
+                        }
+                    }
+                }
+                if ( $size > 300 * 1024 || $width > 2000 || $height > 2000 ) {
+                    $heavy++;
+                }
+            }
+        }
+
+        $score = $total ? round( ( ( ( $total - $missing ) / $total ) * 0.6 + ( ( $total - $heavy ) / $total ) * 0.4 ) * 100 ) : 0;
+        $color = ( $score >= 80 ) ? 'green' : ( ( $score >= 50 ) ? 'yellow' : 'red' );
+
+        $recs = array();
+        if ( $missing ) {
+            $recs[] = $missing . ' imágenes sin ALT.';
+        }
+        if ( $heavy ) {
+            $recs[] = $heavy . ' imágenes exceden peso recomendado.';
+        }
+
+        return array(
+            'score'           => $score,
+            'color'           => $color,
+            'total'           => $total,
+            'missing_alt'     => $missing,
+            'oversized'       => $heavy,
+            'recommendations' => $recs,
+        );
+    }
+
+    public function run_full_site_analysis() {
+        $posts = get_posts(
+            array(
+                'post_type'   => array( 'post', 'page' ),
+                'post_status' => 'publish',
+                'numberposts' => -1,
+            )
+        );
+        foreach ( $posts as $p ) {
+            $result = $this->perform_analysis( $p->ID, '' );
+            $history = get_post_meta( $p->ID, '_b2sell_seo_history', true );
+            if ( ! is_array( $history ) ) {
+                $history = array();
+            }
+            $history[] = array(
+                'date'           => current_time( 'Y-m-d' ),
+                'score'          => $result['score'],
+                'recommendations'=> array_map(
+                    function( $r ) {
+                        return $r['message'];
+                    },
+                    $result['recommendations']
+                ),
+            );
+            update_post_meta( $p->ID, '_b2sell_seo_history', $history );
+        }
+    }
 }

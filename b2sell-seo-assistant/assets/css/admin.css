@@ -159,6 +159,13 @@ body {
     border-radius: 8px;
 }
 
+.b2sell-analyze-button {
+    background-color: #27ae60 !important;
+    border-color: #27ae60 !important;
+    color: #fff;
+    border-radius: 8px;
+}
+
 @media (max-width: 600px) {
     .b2sell-dashboard-grid {
         flex-direction: column;
