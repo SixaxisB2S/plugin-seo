@@ -93,7 +93,14 @@ class B2Sell_SEO_Assistant {
     }
 
     public function dashboard_page() {
-        $posts        = get_posts(
+        if ( isset( $_GET['run'] ) && isset( $_GET['_wpnonce'] ) ) {
+            if ( wp_verify_nonce( $_GET['_wpnonce'], 'b2sell_run_site_analysis' ) ) {
+                $this->analysis->run_full_site_analysis();
+                echo '<div class="updated"><p>Análisis global completado.</p></div>';
+            }
+        }
+
+        $posts = get_posts(
             array(
                 'post_type'   => array( 'post', 'page' ),
                 'post_status' => 'publish',
@@ -101,75 +108,81 @@ class B2Sell_SEO_Assistant {
             )
         );
 
-        $analyses    = array();
-        $total_score = 0;
-
+        $total_onpage = 0;
+        $analyses     = array();
+        $recs         = array();
         foreach ( $posts as $p ) {
             $history = get_post_meta( $p->ID, '_b2sell_seo_history', true );
             if ( is_array( $history ) && ! empty( $history ) ) {
-                $last          = end( $history );
-                $analyses[]    = array(
-                    'title'          => $p->post_title,
-                    'date'           => $last['date'],
-                    'score'          => intval( $last['score'] ),
-                    'recommendations'=> isset( $last['recommendations'] ) ? $last['recommendations'] : array(),
-                );
-                $total_score   += intval( $last['score'] );
+                $last        = end( $history );
+                $total_onpage += intval( $last['score'] );
+                $analyses[]  = $last;
+                if ( ! empty( $last['recommendations'] ) ) {
+                    $recs = array_merge( $recs, $last['recommendations'] );
+                }
             }
         }
+        $onpage_avg = $analyses ? round( $total_onpage / count( $analyses ) ) : 0;
 
-        $count      = count( $analyses );
-        $avg_score  = $count ? round( $total_score / $count ) : 0;
-        usort(
-            $analyses,
-            function( $a, $b ) {
-                return strcmp( $b['date'], $a['date'] );
-            }
-        );
-        $recent      = array_slice( $analyses, 0, 5 );
-        $latest      = $recent ? $recent[0] : false;
-        $avg_color   = ( $avg_score >= 80 ) ? 'green' : ( ( $avg_score >= 50 ) ? 'yellow' : 'red' );
+        $technical = $this->analysis->get_technical_summary();
+        $images    = $this->analysis->get_images_summary();
+
+        $global_score = round( $onpage_avg * 0.4 + $technical['score'] * 0.4 + $images['score'] * 0.2 );
+        $score_color  = ( $global_score >= 80 ) ? 'green' : ( ( $global_score >= 50 ) ? 'yellow' : 'red' );
+
+        $recs = array_merge( $recs, $technical['recommendations'], $images['recommendations'] );
+        $recs = array_unique( $recs );
+        $recs = array_slice( $recs, 0, 5 );
 
         echo '<div class="wrap b2sell-dashboard">';
-        echo '<h1>B2SELL Dashboard</h1>';
+        echo '<h1>Dashboard SEO</h1>';
         echo '<div class="b2sell-dashboard-grid">';
 
         echo '<div class="b2sell-card b2sell-score-card">';
         echo '<h2>Puntaje SEO Global</h2>';
-        echo '<svg viewBox="0 0 36 36" class="b2sell-gauge">';
-        echo '<path class="b2sell-gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />';
-        echo '<path class="b2sell-gauge-bar b2sell-' . esc_attr( $avg_color ) . '" stroke-dasharray="' . esc_attr( $avg_score ) . ',100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />';
-        echo '<text x="18" y="20.35" class="b2sell-gauge-text">' . esc_html( $avg_score ) . '%</text>';
-        echo '</svg>';
+        printf(
+            '<svg viewBox="0 0 36 36" class="b2sell-gauge"><path class="b2sell-gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" /><path class="b2sell-gauge-bar b2sell-%1$s" stroke-dasharray="%2$d,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" /><text x="18" y="20.35" class="b2sell-gauge-text">%2$d%%</text></svg>',
+            esc_attr( $score_color ),
+            esc_attr( $global_score )
+        );
         echo '</div>';
 
         echo '<div class="b2sell-card">';
-        echo '<h2>Últimos análisis</h2>';
-        if ( $recent ) {
-            echo '<table class="widefat"><thead><tr><th>Título</th><th>Fecha</th><th>Puntaje</th></tr></thead><tbody>';
-            foreach ( $recent as $item ) {
-                $color = ( $item['score'] >= 80 ) ? 'green' : ( ( $item['score'] >= 50 ) ? 'yellow' : 'red' );
-                echo '<tr class="b2sell-' . esc_attr( $color ) . '"><td>' . esc_html( $item['title'] ) . '</td><td>' . esc_html( $item['date'] ) . '</td><td>' . esc_html( $item['score'] ) . '</td></tr>';
+        echo '<h2>SEO Técnico</h2>';
+        echo '<table class="widefat"><tbody>';
+        foreach ( $technical['metrics'] as $m ) {
+            echo '<tr class="b2sell-' . esc_attr( $m['color'] ) . '"><th>' . esc_html( $m['label'] ) . '</th><td>' . esc_html( $m['value'] ) . '</td></tr>';
+        }
+        echo '</tbody></table>';
+        echo '</div>';
+
+        echo '<div class="b2sell-card">';
+        echo '<h2>Imágenes</h2>';
+        echo '<table class="widefat"><tbody>';
+        echo '<tr><th>Total analizadas</th><td>' . esc_html( $images['total'] ) . '</td></tr>';
+        $alt_color = $images['missing_alt'] ? 'red' : 'green';
+        echo '<tr class="b2sell-' . esc_attr( $alt_color ) . '"><th>Sin ALT</th><td>' . esc_html( $images['missing_alt'] ) . '</td></tr>';
+        $size_color = $images['oversized'] ? 'yellow' : 'green';
+        echo '<tr class="b2sell-' . esc_attr( $size_color ) . '"><th>Sobre peso</th><td>' . esc_html( $images['oversized'] ) . '</td></tr>';
+        echo '</tbody></table>';
+        echo '</div>';
+
+        echo '<div class="b2sell-card b2sell-recs">';
+        echo '<h2>Recomendaciones urgentes</h2>';
+        if ( $recs ) {
+            echo '<ul>';
+            foreach ( $recs as $r ) {
+                echo '<li><span class="dashicons dashicons-warning"></span>' . esc_html( $r ) . '</li>';
             }
-            echo '</tbody></table>';
+            echo '</ul>';
         } else {
-            echo '<p>No hay análisis disponibles.</p>';
+            echo '<p>No hay recomendaciones.</p>';
         }
         echo '</div>';
 
-        if ( $latest && ! empty( $latest['recommendations'] ) ) {
-            echo '<div class="b2sell-card b2sell-recs">';
-            echo '<h2>Recomendaciones críticas</h2><ul>';
-            $icons = array( 'dashicons-warning', 'dashicons-info', 'dashicons-yes' );
-            foreach ( array_slice( $latest['recommendations'], 0, 3 ) as $idx => $rec ) {
-                $icon = $icons[ $idx % 3 ];
-                echo '<li><span class="dashicons ' . esc_attr( $icon ) . '"></span>' . esc_html( $rec ) . '</li>';
-            }
-            echo '</ul></div>';
-        }
-
         echo '</div>';
-        echo '<p><a class="button button-primary button-hero b2sell-gpt-button" href="' . esc_url( admin_url( 'admin.php?page=b2sell-seo-gpt' ) ) . '">Generar contenido con GPT</a></p>';
+        $run_url = wp_nonce_url( admin_url( 'admin.php?page=b2sell-seo-assistant&run=1' ), 'b2sell_run_site_analysis' );
+        echo '<p><a class="button button-primary button-hero b2sell-analyze-button" href="' . esc_url( $run_url ) . '">Analizar todo el sitio</a></p>';
         echo '</div>';
     }
 
