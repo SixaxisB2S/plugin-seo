@@ -177,8 +177,14 @@ class B2Sell_GPT_Generator {
                 $dom->loadHTML( '<meta http-equiv="content-type" content="text/html; charset=utf-8" />' . $html );
                 libxml_clear_errors();
                 $imgs = $dom->getElementsByTagName( 'img' );
+                $target_src = sanitize_text_field( $_POST['image_src'] ?? '' );
                 foreach ( $imgs as $img ) {
-                    if ( '' === $img->getAttribute( 'alt' ) ) {
+                    if ( $target_src ) {
+                        if ( $img->getAttribute( 'src' ) === $target_src ) {
+                            $img->setAttribute( 'alt', $content );
+                            break;
+                        }
+                    } elseif ( '' === $img->getAttribute( 'alt' ) ) {
                         $img->setAttribute( 'alt', $content );
                         break;
                     }
