@@ -159,53 +159,58 @@ class B2Sell_SEO_Analysis {
                 foreach ( $results['recommendations'] as $rec ) {
                     echo '<li>' . esc_html( $rec['message'] );
                     if ( ! empty( $rec['action'] ) ) {
-                        echo ' <button class="button b2sell-gpt-suggest" data-action="' . esc_attr( $rec['action'] ) . '" data-post="' . esc_attr( $post_id ) . '" data-keyword="' . esc_attr( $rec['keyword'] ?? '' ) . '" data-current="' . esc_attr( $rec['current'] ?? '' ) . '">Sugerencia con GPT</button>';
+                        echo ' <button class="button b2sell-gpt-suggest" data-action="' . esc_attr( $rec['action'] ) . '" data-post="' . esc_attr( $post_id ) . '" data-keyword="' . esc_attr( $rec['keyword'] ?? '' ) . '" data-current="' . esc_attr( $rec['current'] ?? '' ) . '">Optimizar con GPT</button>';
                     }
                     echo '</li>';
                 }
                 echo '</ul>';
-                echo '<div id="b2sell-gpt-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;">
-                        <div class="b2sell-modal-inner" style="background:#fff;padding:20px;max-width:500px;width:90%;">
-                            <h2>Sugerencia automática por B2SELL GPT Assistant</h2>
-                            <pre id="b2sell-gpt-text" style="white-space:pre-wrap"></pre>
-                            <p>
-                                <button class="button" id="b2sell-gpt-copy">Copiar</button>
-                                <button class="button button-primary" id="b2sell-gpt-insert">Insertar</button>
-                                <button class="button" id="b2sell-gpt-close">Cerrar</button>
-                            </p>
-                        </div>
-                    </div>';
-                echo '<script>
-                const b2sell_gpt_nonce = "' . esc_js( $nonce ) . '";
-                jQuery(function($){
-                    $(".b2sell-gpt-suggest").on("click",function(){
-                        const action=$(this).data("action");
-                        const post=$(this).data("post");
-                        const keyword=$(this).data("keyword");
-                        const current=$(this).data("current");
-                        $("#b2sell-gpt-modal").css("display","flex");
-                        $("#b2sell-gpt-text").text("Generando...");
-                        $("#b2sell-gpt-insert").data("action",action).data("post",post);
-                        $.post(ajaxurl,{action:"b2sell_gpt_generate",gpt_action:action,keyword:keyword,paragraph:current,post_id:post,_wpnonce:b2sell_gpt_nonce},function(res){
-                            if(res.success){$("#b2sell-gpt-text").text(res.data.content);}else{$("#b2sell-gpt-text").text(res.data);}
-                        });
-                    });
-                    $("#b2sell-gpt-copy").on("click",function(){
-                        navigator.clipboard.writeText($("#b2sell-gpt-text").text());
-                    });
-                    $("#b2sell-gpt-insert").on("click",function(){
-                        const action=$(this).data("action");
-                        const post=$(this).data("post");
-                        const content=$("#b2sell-gpt-text").text();
-                        $.post(ajaxurl,{action:"b2sell_gpt_insert",gpt_action:action,post_id:post,content:content,_wpnonce:b2sell_gpt_nonce},function(res){
-                            alert(res.success?"Contenido insertado":res.data);
-                        });
-                    });
-                    $("#b2sell-gpt-close").on("click",function(){
-                        $("#b2sell-gpt-modal").hide();
-                    });
-                });
-                </script>';
+            }
+
+            echo '<div id="b2sell-gpt-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;">'
+                . '<div class="b2sell-modal-inner" style="background:#fff;padding:20px;max-width:500px;width:90%;position:relative;">'
+                . '<h2 style="margin-top:0;text-align:center;">B2SELL GPT Assistant</h2>'
+                . '<pre id="b2sell-gpt-text" style="white-space:pre-wrap"></pre>'
+                . '<p>'
+                . '<button class="button" id="b2sell-gpt-copy">Copiar</button>'
+                . '<button class="button button-primary" id="b2sell-gpt-insert">Insertar</button>'
+                . '<button class="button" id="b2sell-gpt-close">Cerrar</button>'
+                . '</p>'
+                . '<div style="text-align:center;font-size:12px;">Desarrollado por B2Sell SPA</div>'
+                . '</div>'
+                . '</div>';
+            echo '<script>'
+                . 'const b2sell_gpt_nonce = "' . esc_js( $nonce ) . '";'
+                . 'jQuery(function($){'
+                . '$(".b2sell-gpt-suggest").on("click",function(){'
+                . 'const action=$(this).data("action");'
+                . 'const post=$(this).data("post");'
+                . 'const keyword=$(this).data("keyword");'
+                . 'const current=$(this).data("current");'
+                . 'const image=$(this).data("image");'
+                . '$("#b2sell-gpt-modal").css("display","flex");'
+                . '$("#b2sell-gpt-text").text("Generando...");'
+                . '$("#b2sell-gpt-insert").data("action",action).data("post",post).data("image",image);'
+                . '$.post(ajaxurl,{action:"b2sell_gpt_generate",gpt_action:action,keyword:keyword,paragraph:current,post_id:post,_wpnonce:b2sell_gpt_nonce},function(res){'
+                . 'if(res.success){$("#b2sell-gpt-text").text(res.data.content);}else{$("#b2sell-gpt-text").text(res.data.message||res.data);}'
+                . '});'
+                . '});'
+                . '$("#b2sell-gpt-copy").on("click",function(){'
+                . 'navigator.clipboard.writeText($("#b2sell-gpt-text").text());'
+                . '});'
+                . '$("#b2sell-gpt-insert").on("click",function(){'
+                . 'const action=$(this).data("action");'
+                . 'const post=$(this).data("post");'
+                . 'const image=$(this).data("image");'
+                . 'const content=$("#b2sell-gpt-text").text();'
+                . 'const data={action:"b2sell_gpt_insert",gpt_action:action,post_id:post,content:content,_wpnonce:b2sell_gpt_nonce};'
+                . 'if(image){data.image_src=image;}'
+                . '$.post(ajaxurl,data,function(res){alert(res.success?"Contenido insertado":(res.data && res.data.message?res.data.message:res.data));});'
+                . '});'
+                . '$("#b2sell-gpt-close").on("click",function(){'
+                . '$("#b2sell-gpt-modal").hide();'
+                . '});'
+                . '});'
+                . '</script>';
             }
 
             // Image SEO analysis section.
@@ -250,7 +255,7 @@ class B2Sell_SEO_Analysis {
             if ( ! empty( $images ) ) {
                 echo '<h2>SEO de Imágenes</h2>';
                 echo '<style>.b2sell-image-green{background:#cfc;} .b2sell-image-yellow{background:#ffc;} .b2sell-image-red{background:#fcc;} .b2sell-red{color:#c00;}</style>';
-                echo '<table class="widefat fixed"><thead><tr><th>Imagen</th><th>ALT actual</th><th>Sugerencia GPT</th><th>Tamaño/Dimensiones</th><th>Acción</th></tr></thead><tbody>';
+                echo '<table class="widefat fixed"><thead><tr><th>Imagen</th><th>ALT actual</th><th>Tamaño/Dimensiones</th><th>Acción</th></tr></thead><tbody>';
                 foreach ( $images as $im ) {
                     $size_text = $im['size'] ? size_format( $im['size'], 2 ) : '-';
                     $dim_text  = $im['width'] && $im['height'] ? $im['width'] . 'x' . $im['height'] : '-';
@@ -265,12 +270,11 @@ class B2Sell_SEO_Analysis {
                     echo '<tr class="' . esc_attr( $row_class ) . '">';
                     echo '<td><img src="' . esc_url( $im['src'] ) . '" style="max-width:100px;height:auto;" /></td>';
                     echo '<td>' . esc_html( $im['alt'] ) . '</td>';
-                    echo '<td class="b2sell-gpt-suggestion"></td>';
                     $size_cell = $oversize ? '<span class="b2sell-red">' . esc_html( $size_text . ' / ' . $dim_text ) . '</span><br/><em>Optimiza esta imagen para mejorar velocidad de carga</em>' : esc_html( $size_text . ' / ' . $dim_text );
                     echo '<td>' . $size_cell . '</td>';
                     if ( '' === $im['alt'] ) {
                         $keyword = sanitize_title( basename( parse_url( $im['src'], PHP_URL_PATH ) ) );
-                        echo '<td><button class="button b2sell-gpt-image" data-src="' . esc_attr( $im['src'] ) . '" data-post="' . esc_attr( $post_id ) . '" data-keyword="' . esc_attr( $keyword ) . '">Sugerir ALT</button></td>';
+                        echo '<td><button class="button b2sell-gpt-suggest" data-action="alt" data-post="' . esc_attr( $post_id ) . '" data-keyword="' . esc_attr( $keyword ) . '" data-image="' . esc_attr( $im['src'] ) . '">Optimizar con GPT</button></td>';
                     } else {
                         echo '<td>-</td>';
                     }
@@ -278,7 +282,6 @@ class B2Sell_SEO_Analysis {
                 }
                 echo '</tbody></table>';
                 echo '<p><strong>Recomendaciones generales:</strong></p><ul><li>Usar nombres de archivo descriptivos.</li><li>Incluir siempre ALT.</li><li>Comprimir imágenes pesadas.</li><li>Usar formatos modernos (WebP).</li></ul>';
-                echo '<script>jQuery(function($){$(".b2sell-gpt-image").on("click",function(){const btn=$(this);const src=btn.data("src");const post=btn.data("post");const keyword=btn.data("keyword");const cell=btn.closest("tr").find(".b2sell-gpt-suggestion");cell.text("Generando...");$.post(ajaxurl,{action:"b2sell_gpt_generate",gpt_action:"alt",keyword:keyword,post_id:post,_wpnonce:b2sell_gpt_nonce},function(res){if(res.success){cell.html("<pre>"+res.data.content+"</pre><button class=\"button b2sell-gpt-copy\">Copiar</button> <button class=\"button b2sell-gpt-insert\" data-post=\""+post+"\" data-src=\""+src+"\">Insertar</button>");}else{cell.text(res.data.message||res.data);}});});$(document).on("click",".b2sell-gpt-copy",function(){navigator.clipboard.writeText($(this).prev("pre").text());});$(document).on("click",".b2sell-gpt-insert",function(){const btn=$(this);const post=btn.data("post");const src=btn.data("src");const content=btn.prev("pre").text();$.post(ajaxurl,{action:"b2sell_gpt_insert",gpt_action:"alt",post_id:post,content:content,image_src:src,_wpnonce:b2sell_gpt_nonce},function(res){alert(res.success?"ALT insertado":res.data);});});});</script>';
             }
 
             $ps = $this->get_pagespeed_data( get_permalink( $post_id ) );
@@ -308,15 +311,13 @@ class B2Sell_SEO_Analysis {
                 echo 'new Chart(ctxGauge,{type:"doughnut",data:{datasets:[{data:[' . esc_js( $ps['score'] ) . ',' . esc_js( 100 - $ps['score'] ) . '],backgroundColor:["' . esc_js( $ps['score_color'] ) . '","#eee"],borderWidth:0,circumference:180,rotation:270}]},options:{plugins:{legend:false},cutout:"70%"}});';
                 echo 'var ctxBar=document.getElementById("b2sell-speed-bars").getContext("2d");';
                 echo 'new Chart(ctxBar,{type:"bar",data:{labels:["TTFB","LCP","CLS","' . esc_js( $ps['inter_label'] ) . '"],datasets:[{data:[' . esc_js( $ps['ttfb'] ) . ',' . esc_js( $ps['lcp'] ) . ',' . esc_js( $ps['cls'] ) . ',' . esc_js( $ps['inter'] ) . '],backgroundColor:["' . esc_js( $ps['ttfb_color'] ) . '","' . esc_js( $ps['lcp_color'] ) . '","' . esc_js( $ps['cls_color'] ) . '","' . esc_js( $ps['inter_color'] ) . '"]}]},options:{scales:{y:{beginAtZero:true}}}});';
-                echo '</script>';
-            }
-        }
+                  echo '</script>';
+              }
+              echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=b2sell-seo-analisis' ) ) . '">Volver al listado</a></p>';
+              echo '</div>';
+          }
 
-        echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=b2sell-seo-analisis' ) ) . '">Volver al listado</a></p>';
-        echo '</div>';
-    }
-
-    private function render_technical() {
+      private function render_technical() {
         $results = $this->perform_technical_analysis();
 
         echo '<div class="wrap">';
