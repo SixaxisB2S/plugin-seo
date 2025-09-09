@@ -17,6 +17,89 @@ class B2Sell_Competencia {
         add_action( 'wp_ajax_b2sell_competencia_reanalyze', array( $this, 'ajax_reanalyze' ) );
     }
 
+    private function ctr_from_rank( $rank ) {
+        if ( 1 === $rank ) {
+            return 0.27;
+        }
+        if ( 2 === $rank ) {
+            return 0.15;
+        }
+        if ( 3 === $rank ) {
+            return 0.10;
+        }
+        if ( in_array( $rank, array( 4, 5 ), true ) ) {
+            return 0.06;
+        }
+        if ( in_array( $rank, array( 6, 7 ), true ) ) {
+            return 0.04;
+        }
+        if ( $rank >= 8 && $rank <= 10 ) {
+            return 0.02;
+        }
+        return 0;
+    }
+
+    private function get_keyword_volumes( $keywords ) {
+        $dev_token     = get_option( 'b2sell_ads_developer_token', '' );
+        $client_id     = get_option( 'b2sell_ads_client_id', '' );
+        $client_secret = get_option( 'b2sell_ads_client_secret', '' );
+        $refresh_token = get_option( 'b2sell_ads_refresh_token', '' );
+        $customer_id   = get_option( 'b2sell_ads_customer_id', '' );
+        if ( ! $dev_token || ! $client_id || ! $client_secret || ! $refresh_token || ! $customer_id ) {
+            return array();
+        }
+        $token_res = wp_remote_post(
+            'https://oauth2.googleapis.com/token',
+            array(
+                'body' => array(
+                    'client_id'     => $client_id,
+                    'client_secret' => $client_secret,
+                    'refresh_token' => $refresh_token,
+                    'grant_type'    => 'refresh_token',
+                ),
+            )
+        );
+        if ( is_wp_error( $token_res ) ) {
+            return array();
+        }
+        $token_data = json_decode( wp_remote_retrieve_body( $token_res ), true );
+        $access     = $token_data['access_token'] ?? '';
+        if ( ! $access ) {
+            return array();
+        }
+        $url      = 'https://googleads.googleapis.com/v14/customers/' . rawurlencode( $customer_id ) . ':generateKeywordIdeas';
+        $body     = array(
+            'keywordSeed'         => array( 'keywords' => array_values( $keywords ) ),
+            'includeAdultKeywords'=> false,
+        );
+        $response = wp_remote_post(
+            $url,
+            array(
+                'headers' => array(
+                    'Authorization'   => 'Bearer ' . $access,
+                    'developer-token' => $dev_token,
+                    'Content-Type'    => 'application/json',
+                ),
+                'body'    => wp_json_encode( $body ),
+            )
+        );
+        if ( is_wp_error( $response ) ) {
+            return array();
+        }
+        $data    = json_decode( wp_remote_retrieve_body( $response ), true );
+        $volumes = array();
+        if ( ! empty( $data['results'] ) ) {
+            foreach ( $data['results'] as $res ) {
+                $text   = $res['text'] ?? '';
+                $volume = $res['keywordIdeaMetrics']['avgMonthlySearches'] ?? 0;
+                if ( $text ) {
+                    $volumes[ $text ] = (int) $volume;
+                }
+            }
+        }
+        return $volumes;
+    }
+
     public static function install() {
         global $wpdb;
         $table = $wpdb->prefix . 'b2sell_comp_history';
@@ -118,19 +201,22 @@ class B2Sell_Competencia {
                 $("#b2sell_comp_results").html("Buscando...");
                 $.post(ajaxurl,{action:"b2sell_competencia_search",keywords:kws,post_id:pid,_wpnonce:b2sellCompNonce},function(res){
                     if(res.success){
-                        b2sellCompResults = res.data;
+                        b2sellCompResults = {};
                         var my = b2sellCompPosts[pid]||{title:"",meta:"",url:""};
                         var html = "";
                         kws.forEach(function(kw){
-                            var list = res.data[kw] || [];
-                            html += "<div class=\"b2sell-comp-block\" data-key=\""+kw+"\"><h2>"+kw+"</h2>";
+                            var dataKw = res.data[kw] || {};
+                            var list = dataKw.items || [];
+                            var myTraffic = dataKw.my_traffic || 0;
+                            b2sellCompResults[kw] = list;
+                            html += "<div class=\\"b2sell-comp-block\\" data-key=\\""+kw+"\\"><h2>"+kw+"</h2>";
                             if(list.length){
-                                html += "<table class=\"widefat\"><thead><tr><th>Posición</th><th>Título</th><th>Meta description</th><th>URL</th><th>Mi título</th><th>Mi meta</th><th>Mi URL</th></tr></thead><tbody>";
+                                html += "<table class=\\"widefat\\"><thead><tr><th>Posición</th><th>Título</th><th>Meta description</th><th>URL</th><th>Mi título</th><th>Mi meta</th><th>Mi URL</th><th>Tráfico estimado <span class=\\"dashicons dashicons-editor-help\\" title=\\"Valores estimados basados en volumen de búsqueda y CTR promedio.\\"></span></th></tr></thead><tbody>";
                                 list.forEach(function(r){
-                                    html += "<tr><td>"+r.rank+"</td><td>"+r.title+"</td><td>"+r.snippet+"</td><td><a href=\""+r.link+"\" target=\"_blank\">"+r.link+"</a></td><td>"+my.title+"</td><td>"+my.meta+"</td><td>"+(my.url?"<a href=\\\""+my.url+"\\\" target=\\\"_blank\\\">"+my.url+"</a>":"")+"</td></tr>";
+                                    html += "<tr><td>"+r.rank+"</td><td>"+r.title+"</td><td>"+r.snippet+"</td><td><a href=\\""+r.link+"\\" target=\\"_blank\\">"+r.link+"</a></td><td>"+my.title+"</td><td>"+my.meta+"</td><td>"+(my.url?"<a href=\\\\\\""+my.url+"\\\\\\" target=\\\\\\"_blank\\\\\\">"+my.url+"</a>":"")+"</td><td>"+r.traffic+"<br><small>Mi sitio: "+myTraffic+"</small></td></tr>";
                                 });
                                 html += "</tbody></table>";
-                                if(pid){html += "<button class=\"button b2sell_comp_opt_btn\" data-keyword=\""+kw+"\" style=\"margin-top:10px;\">Optimizar con GPT</button>";}
+                                if(pid){html += "<button class=\\"button b2sell_comp_opt_btn\\" data-keyword=\\""+kw+"\\" style=\\"margin-top:10px;\\">Optimizar con GPT</button>";}
                             }else{
                                 html += "<p>Sin resultados</p>";
                             }
@@ -207,6 +293,7 @@ class B2Sell_Competencia {
         }
         $results = array();
         $my_url  = $post_id ? get_permalink( $post_id ) : '';
+        $volumes = $this->get_keyword_volumes( $keywords );
         foreach ( $keywords as $keyword ) {
             $url      = add_query_arg(
                 array(
@@ -222,10 +309,11 @@ class B2Sell_Competencia {
                 $results[ $keyword ] = array();
                 continue;
             }
-            $data      = json_decode( wp_remote_retrieve_body( $response ), true );
-            $items     = $data['items'] ?? array();
+            $data       = json_decode( wp_remote_retrieve_body( $response ), true );
+            $items      = $data['items'] ?? array();
             $kw_results = array();
             $my_rank    = 0;
+            $volume     = $volumes[ $keyword ] ?? 0;
             foreach ( $items as $index => $item ) {
                 $link   = $item['link'] ?? '';
                 $domain = parse_url( $link, PHP_URL_HOST );
@@ -239,9 +327,14 @@ class B2Sell_Competencia {
                     'link'    => $link,
                     'domain'  => $domain,
                     'rank'    => $rank,
+                    'traffic' => intval( $volume * $this->ctr_from_rank( $rank ) ),
                 );
             }
-            $results[ $keyword ] = $kw_results;
+            $results[ $keyword ] = array(
+                'items'      => $kw_results,
+                'my_traffic' => intval( $volume * $this->ctr_from_rank( $my_rank ) ),
+                'volume'     => $volume,
+            );
             global $wpdb;
             $wpdb->insert(
                 $this->table,
@@ -359,6 +452,8 @@ class B2Sell_Competencia {
         $kw_results = array();
         $my_rank    = 0;
         $my_url     = $post_id ? get_permalink( $post_id ) : '';
+        $volumes    = $this->get_keyword_volumes( array( $keyword ) );
+        $volume     = $volumes[ $keyword ] ?? 0;
         foreach ( $items as $index => $item ) {
             $link   = $item['link'] ?? '';
             $domain = parse_url( $link, PHP_URL_HOST );
@@ -372,6 +467,7 @@ class B2Sell_Competencia {
                 'link'    => $link,
                 'domain'  => $domain,
                 'rank'    => $rank,
+                'traffic' => intval( $volume * $this->ctr_from_rank( $rank ) ),
             );
         }
         $wpdb->insert(
