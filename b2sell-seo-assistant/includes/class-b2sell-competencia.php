@@ -15,6 +15,7 @@ class B2Sell_Competencia {
         add_action( 'wp_ajax_b2sell_competencia_insert', array( $this, 'ajax_insert' ) );
         add_action( 'wp_ajax_b2sell_competencia_history_detail', array( $this, 'ajax_history_detail' ) );
         add_action( 'wp_ajax_b2sell_competencia_reanalyze', array( $this, 'ajax_reanalyze' ) );
+        add_action( 'wp_ajax_b2sell_competencia_interpret', array( $this, 'ajax_interpret' ) );
     }
 
     private function ctr_from_rank( $rank ) {
@@ -217,12 +218,26 @@ class B2Sell_Competencia {
                                 });
                                 html += "</tbody></table>";
                                 if(pid){html += "<button class=\\"button b2sell_comp_opt_btn\\" data-keyword=\\""+kw+"\\" style=\\"margin-top:10px;\\">Optimizar con GPT</button>";}
+                                html += "<canvas class=\\"b2sell_comp_flow\\" data-key=\\""+kw+"\\" height=\\"120\\" style=\\"margin-top:20px;\\"></canvas>";
+                                html += "<div class=\\"b2sell_comp_interpret\\" data-key=\\""+kw+"\\" style=\\"margin-top:10px;\\"></div>";
                             }else{
                                 html += "<p>Sin resultados</p>";
                             }
                             html += "</div>";
                         });
                         $("#b2sell_comp_results").html(html);
+                        kws.forEach(function(kw){
+                            var flow = res.data[kw] && res.data[kw].traffic_flow ? res.data[kw].traffic_flow : null;
+                            if(flow){
+                                var ctx = $(".b2sell_comp_flow[data-key=\""+kw+"\"]")[0].getContext(\'2d\');
+                                new Chart(ctx,{type:"line",data:{labels:[\'Actual\',\'3\',\'2\',\'1\'],datasets:[{label:\'Tráfico estimado\',data:[flow.current,flow.pos3,flow.pos2,flow.pos1],borderColor:"#0073aa",fill:false}]},options:{scales:{y:{beginAtZero:true}}}});
+                                $.post(ajaxurl,{action:"b2sell_competencia_interpret",rank:flow.current_rank,current:flow.current,pos3:flow.pos3,pos2:flow.pos2,pos1:flow.pos1,keyword:kw,_wpnonce:b2sellCompNonce},function(r2){
+                                    if(r2.success){
+                                        $(".b2sell_comp_interpret[data-key=\""+kw+"\"]").text(r2.data.text);
+                                    }
+                                });
+                            }
+                        });
                     }else{
                         $("#b2sell_comp_results").html("<div class=\"error\"><p>"+res.data+"</p></div>");
                     }
@@ -334,6 +349,13 @@ class B2Sell_Competencia {
                 'items'      => $kw_results,
                 'my_traffic' => intval( $volume * $this->ctr_from_rank( $my_rank ) ),
                 'volume'     => $volume,
+                'traffic_flow' => array(
+                    'current_rank' => $my_rank,
+                    'current'      => intval( $volume * $this->ctr_from_rank( $my_rank ) ),
+                    'pos3'         => intval( $volume * $this->ctr_from_rank( 3 ) ),
+                    'pos2'         => intval( $volume * $this->ctr_from_rank( 2 ) ),
+                    'pos1'         => intval( $volume * $this->ctr_from_rank( 1 ) ),
+                ),
             );
             global $wpdb;
             $wpdb->insert(
@@ -482,6 +504,57 @@ class B2Sell_Competencia {
             )
         );
         wp_send_json_success();
+    }
+
+    public function ajax_interpret() {
+        check_ajax_referer( 'b2sell_competencia_nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Permisos insuficientes' );
+        }
+        $rank    = intval( $_POST['rank'] ?? 0 );
+        $current = intval( $_POST['current'] ?? 0 );
+        $pos3    = intval( $_POST['pos3'] ?? 0 );
+        $pos2    = intval( $_POST['pos2'] ?? 0 );
+        $pos1    = intval( $_POST['pos1'] ?? 0 );
+        $keyword = sanitize_text_field( $_POST['keyword'] ?? '' );
+        $api_key = get_option( 'b2sell_openai_api_key', '' );
+        if ( ! $api_key ) {
+            wp_send_json_error( 'API Key de OpenAI no configurada' );
+        }
+        $prompt = 'El sitio está en la posición ' . $rank . ' para la palabra clave "' . $keyword . '" con un tráfico estimado de '
+            . $current . ' visitas mensuales. En la posición 3 tendría ' . $pos3 . ', en la posición 2 ' . $pos2 .
+            ' y en la posición 1 ' . $pos1 .
+            '. Redacta una breve interpretación en español sobre el potencial de mejora del tráfico mencionando incrementos porcentuales.';
+        $response = wp_remote_post(
+            'https://api.openai.com/v1/chat/completions',
+            array(
+                'headers' => array(
+                    'Content-Type'  => 'application/json',
+                    'Authorization' => 'Bearer ' . $api_key,
+                ),
+                'body'    => wp_json_encode(
+                    array(
+                        'model'    => 'gpt-3.5-turbo',
+                        'messages' => array(
+                            array(
+                                'role'    => 'user',
+                                'content' => $prompt,
+                            ),
+                        ),
+                    )
+                ),
+                'timeout' => 30,
+            )
+        );
+        if ( is_wp_error( $response ) ) {
+            wp_send_json_error( 'Error de conexión con OpenAI' );
+        }
+        $data = json_decode( wp_remote_retrieve_body( $response ), true );
+        $text = trim( $data['choices'][0]['message']['content'] ?? '' );
+        if ( ! $text ) {
+            wp_send_json_error( 'Respuesta inválida de OpenAI' );
+        }
+        wp_send_json_success( array( 'text' => $text ) );
     }
 
     public function ajax_optimize() {
