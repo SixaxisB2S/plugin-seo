@@ -302,10 +302,12 @@ class B2Sell_Competencia {
                             }
                         });
                     }else{
+                        console.error("Error en búsqueda:", res);
                         $("#b2sell_comp_results").html("<div class=\"error\"><p>"+res.data+"</p></div>");
                     }
                 }).fail(function(jqXHR){
                     var msg = jqXHR.responseText || "Error al realizar la búsqueda";
+                    console.error("Error al realizar la búsqueda:", jqXHR);
                     $("#b2sell_comp_results").html("<div class=\"error\"><p>"+msg+"</p></div>");
                 });
             });
