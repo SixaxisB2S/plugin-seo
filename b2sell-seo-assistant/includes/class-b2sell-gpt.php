@@ -102,11 +102,11 @@ class B2Sell_GPT_Generator {
         $max_len = 0;
         switch ( $action ) {
             case 'title':
-                $prompt  = 'Generar un Título SEO con un máximo de 60 caracteres. El texto debe ser natural y no cortarse en la mitad de una palabra. Tema: ' . $keyword;
+                $prompt  = 'Genera un Título SEO que tenga como máximo 60 caracteres y no corte ninguna palabra. Responde solo con el texto del título. Tema: ' . $keyword;
                 $max_len = 60;
                 break;
             case 'meta':
-                $prompt  = 'Generar una Meta description con un máximo de 160 caracteres. El texto debe ser natural y no cortarse en la mitad de una palabra. Tema: ' . $keyword;
+                $prompt  = 'Genera una Meta description que tenga como máximo 160 caracteres y no corte ninguna palabra. Responde solo con el texto de la descripción. Tema: ' . $keyword;
                 $max_len = 160;
                 break;
             case 'rewrite':
@@ -122,7 +122,8 @@ class B2Sell_GPT_Generator {
                 wp_send_json_error( array( 'message' => 'Acción no válida' ) );
         }
 
-        $attempts = 0;
+        $attempts     = 0;
+        $max_attempts = 3;
         do {
             $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', array(
                 'headers' => array(
@@ -153,15 +154,13 @@ class B2Sell_GPT_Generator {
             if ( ! isset( $data['choices'][0]['message']['content'] ) ) {
                 wp_send_json_error( array( 'message' => 'Respuesta inválida de OpenAI' ) );
             }
-            $content = trim( $data['choices'][0]['message']['content'] );
+            $content  = trim( $data['choices'][0]['message']['content'] );
             $attempts++;
-        } while ( $max_len && mb_strlen( $content ) > $max_len && $attempts < 5 );
+        } while ( $max_len && mb_strlen( $content ) > $max_len && $attempts < $max_attempts );
 
-        if ( $max_len && mb_strlen( $content ) > $max_len ) {
-            wp_send_json_error( array( 'message' => 'No se pudo generar un texto dentro del límite de caracteres' ) );
-        }
+        $over = $max_len ? max( 0, mb_strlen( $content ) - $max_len ) : 0;
 
-        wp_send_json_success( array( 'content' => $content ) );
+        wp_send_json_success( array( 'content' => $content, 'over' => $over ) );
     }
 
     public function ajax_generate_meta() {
@@ -180,9 +179,10 @@ class B2Sell_GPT_Generator {
         if ( ! $api_key ) {
             wp_send_json_error( array( 'message' => 'API Key no configurada' ) );
         }
-        $prompt = 'Basado en el siguiente contenido genera un título SEO con un máximo de 60 caracteres y una meta description con un máximo de 160 caracteres. El texto debe ser natural y no cortarse en la mitad de una palabra. Devuelve un JSON con las claves "title" y "description":\n\n' . $content;
+        $prompt = 'Basado en el siguiente contenido genera un título SEO (máximo 60 caracteres, sin cortar palabras) y una meta description (máximo 160 caracteres, sin cortar palabras). Devuelve un JSON con las claves "title" y "description":\n\n' . $content;
 
-        $attempts = 0;
+        $attempts     = 0;
+        $max_attempts = 3;
         do {
             $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', array(
                 'headers' => array(
@@ -227,20 +227,26 @@ class B2Sell_GPT_Generator {
                     }
                 }
             }
-            $title = isset( $json['title'] ) ? trim( $json['title'] ) : '';
-            $desc  = isset( $json['description'] ) ? trim( $json['description'] ) : '';
+            $title     = isset( $json['title'] ) ? trim( $json['title'] ) : '';
+            $desc      = isset( $json['description'] ) ? trim( $json['description'] ) : '';
             $attempts++;
-        } while ( ( mb_strlen( $title ) > 60 || mb_strlen( $desc ) > 160 ) && $attempts < 5 );
+        } while ( ( mb_strlen( $title ) > 60 || mb_strlen( $desc ) > 160 ) && $attempts < $max_attempts );
 
         if ( '' === $title && '' === $desc ) {
             wp_send_json_error( array( 'message' => 'Respuesta inválida de OpenAI' ) );
         }
 
-        if ( mb_strlen( $title ) > 60 || mb_strlen( $desc ) > 160 ) {
-            wp_send_json_error( array( 'message' => 'No se pudieron generar sugerencias dentro del límite de caracteres' ) );
-        }
+        $over_title = max( 0, mb_strlen( $title ) - 60 );
+        $over_desc  = max( 0, mb_strlen( $desc ) - 160 );
 
-        wp_send_json_success( array( 'title' => $title, 'description' => $desc ) );
+        wp_send_json_success(
+            array(
+                'title'            => $title,
+                'description'      => $desc,
+                'over_title'       => $over_title,
+                'over_description' => $over_desc,
+            )
+        );
     }
 
     public function ajax_insert() {
