@@ -267,6 +267,8 @@ class B2Sell_SEO_Assistant {
         echo '<input type="text" id="b2sell_openai_api_key" name="b2sell_openai_api_key" value="' . esc_attr( $openai_key ) . '" style="width:400px;" /></p>';
         echo '<p><label for="b2sell_pagespeed_api_key">Google PageSpeed API Key:</label> ';
         echo '<input type="text" id="b2sell_pagespeed_api_key" name="b2sell_pagespeed_api_key" value="' . esc_attr( $pagespeed_key ) . '" style="width:400px;" /></p>';
+        echo '<h2>Google Custom Search</h2>';
+        echo '<p>La <strong>API Key</strong> y el <strong>ID del motor de búsqueda (CX)</strong> son necesarios para realizar la búsqueda de competencia. Obtén estos valores en <a href="https://developers.google.com/custom-search/v1/introduction" target="_blank">Google Custom Search</a>.</p>';
         echo '<p><label for="b2sell_google_api_key">Google Custom Search API Key:</label> ';
         echo '<input type="text" id="b2sell_google_api_key" name="b2sell_google_api_key" value="' . esc_attr( $google_key ) . '" style="width:400px;" /></p>';
         echo '<p><label for="b2sell_google_cx">ID del motor de búsqueda (CX):</label> ';
