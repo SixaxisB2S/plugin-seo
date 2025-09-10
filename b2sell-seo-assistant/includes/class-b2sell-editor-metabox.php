@@ -77,6 +77,7 @@ class B2Sell_SEO_Editor_Metabox {
                 <h2>Sugerencia GPT</h2>
                 <textarea id="b2sell-field-gpt-text" style="width:100%;height:80px;"></textarea>
                 <small><span id="b2sell-field-gpt-count">0</span> caracteres <span id="b2sell-field-gpt-indicator" class="b2sell-seo-indicator"></span></small>
+                <div id="b2sell-field-gpt-warning" class="b2sell-red" style="display:none;"></div>
                 <div class="b2sell-snippet-preview">
                     <div class="b2sell-snippet-tabs"><button type="button" class="b2sell-snippet-tab active" data-view="desktop">Vista Desktop</button><button type="button" class="b2sell-snippet-tab" data-view="mobile">Vista Móvil</button></div>
                     <div class="b2sell-snippet-desktop b2sell-snippet-view"><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-url"><?php echo esc_html( home_url() ); ?></span><span class="b2sell-snippet-desc"></span></div>
@@ -90,7 +91,6 @@ class B2Sell_SEO_Editor_Metabox {
         jQuery(function($){
             const gptNonce='<?php echo esc_js( $nonce ); ?>';
             let currentField='';
-            let tries=0;
             function evaluateStatus(len,greenMin,greenMax,yellowLowMin,yellowLowMax,yellowHighMin,yellowHighMax){
                 if(len>=greenMin&&len<=greenMax){return 'green';}
                 if((len>=yellowLowMin&&len<=yellowLowMax)||(len>=yellowHighMin&&len<=yellowHighMax)){return 'yellow';}
@@ -102,6 +102,13 @@ class B2Sell_SEO_Editor_Metabox {
                 $('#b2sell-field-gpt-count').text(len);
                 const status=currentField==='title'?evaluateStatus(len,45,60,30,44,61,70):evaluateStatus(len,120,160,80,119,161,180);
                 $('#b2sell-field-gpt-indicator').attr('class','b2sell-seo-indicator '+status);
+                const max=currentField==='title'?60:160;
+                const over=len-max;
+                if(over>0){
+                    $('#b2sell-field-gpt-warning').text('Excede por '+over+' caracteres').show();
+                }else{
+                    $('#b2sell-field-gpt-warning').hide();
+                }
                 const t=currentField==='title'?val:$('#b2sell_seo_title').val();
                 const m=currentField==='meta'?val:$('#b2sell_seo_description').val();
                 $('#b2sell-field-gpt-modal .b2sell-snippet-title').text(t);
@@ -111,16 +118,11 @@ class B2Sell_SEO_Editor_Metabox {
             function requestSuggestion(postID){
                 $.post(ajaxurl,{action:'b2sell_gpt_generate',gpt_action:currentField,post_id:postID,_wpnonce:gptNonce},function(res){
                     if(res.success){
-                        const max=currentField==='title'?60:160;
-                        if(res.data.content.length>max&&tries<5){
-                            tries++;
-                            requestSuggestion(postID);
-                            return;
-                        }
                         $('#b2sell-field-gpt-text').val(res.data.content);
                         updateModalSnippet();
                     }else{
                         $('#b2sell-field-gpt-text').val(res.data.message||res.data);
+                        $('#b2sell-field-gpt-warning').hide();
                     }
                 });
             }
@@ -129,7 +131,6 @@ class B2Sell_SEO_Editor_Metabox {
                 $('#b2sell-field-gpt-modal').css('display','flex');
                 $('#b2sell-field-gpt-text').val('Generando...');
                 const postID=<?php echo intval( $post->ID ); ?>;
-                tries=0;
                 requestSuggestion(postID);
             });
             $('#b2sell-field-gpt-close').on('click',function(){$('#b2sell-field-gpt-modal').hide();});

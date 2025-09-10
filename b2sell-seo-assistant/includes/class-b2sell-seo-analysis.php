@@ -116,16 +116,16 @@ class B2Sell_SEO_Analysis {
         echo '<div id="b2sell-meta-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:100000;">';
         echo '<div style="background:#fff;padding:20px;max-width:600px;width:90%;max-height:90%;overflow:auto;">';
         echo '<h2>Editar metadatos</h2>';
-        echo '<p><label>Título SEO<br /><input type="text" id="b2sell-meta-modal-title" style="width:100%;" /></label><br /><small><span id="b2sell-modal-title-count">0</span> caracteres</small><div id="b2sell-modal-title-warning" style="color:#c00;display:none;">Se recomienda máximo 60 caracteres para el título</div></p>';
-        echo '<p><label>Meta description<br /><textarea id="b2sell-meta-modal-desc" style="width:100%;" rows="3"></textarea></label><br /><small><span id="b2sell-modal-desc-count">0</span> caracteres</small><div id="b2sell-modal-desc-warning" style="color:#c00;display:none;">Se recomienda máximo 160 caracteres para la meta description</div></p>';
+        echo '<p><label>Título SEO<br /><input type="text" id="b2sell-meta-modal-title" style="width:100%;" /></label><br /><small><span id="b2sell-modal-title-count">0</span> caracteres</small><div id="b2sell-modal-title-warning" style="color:#c00;display:none;"></div></p>';
+        echo '<p><label>Meta description<br /><textarea id="b2sell-meta-modal-desc" style="width:100%;" rows="3"></textarea></label><br /><small><span id="b2sell-modal-desc-count">0</span> caracteres</small><div id="b2sell-modal-desc-warning" style="color:#c00;display:none;"></div></p>';
         echo '<div class="b2sell-snippet-preview"><div class="b2sell-snippet-tabs"><button type="button" class="b2sell-snippet-tab active" data-view="desktop">Vista Desktop</button><button type="button" class="b2sell-snippet-tab" data-view="mobile">Vista Móvil</button></div><div class="b2sell-snippet-desktop b2sell-snippet-view"><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-url">' . esc_html( home_url() ) . '</span><span class="b2sell-snippet-desc"></span></div><div class="b2sell-snippet-mobile b2sell-snippet-view" style="display:none;"><span class="b2sell-snippet-url">' . esc_html( home_url() ) . '</span><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-desc"></span></div></div>';
         echo '<p><button class="button button-primary" id="b2sell-meta-save">Guardar</button> <button class="button" id="b2sell-meta-cancel">Cancelar</button></p>';
         echo '</div></div>';
         echo '<div id="b2sell-meta-gpt" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:100000;">';
         echo '<div style="background:#fff;padding:20px;max-width:600px;width:90%;max-height:90%;overflow:auto;">';
         echo '<h2>Sugerencias GPT</h2>';
-        echo '<p><label>Título SEO<br/><input type="text" id="b2sell-gpt-modal-title" style="width:100%;" /></label> <small><span id="b2sell-gpt-title-count">0</span> caracteres</small><div id="b2sell-gpt-title-warning" style="color:#c00;display:none;">Se recomienda máximo 60 caracteres para el título</div></p>';
-        echo '<p><label>Meta description<br/><textarea id="b2sell-gpt-modal-desc" rows="3" style="width:100%;"></textarea></label> <small><span id="b2sell-gpt-desc-count">0</span> caracteres</small><div id="b2sell-gpt-desc-warning" style="color:#c00;display:none;">Se recomienda máximo 160 caracteres para la meta description</div></p>';
+        echo '<p><label>Título SEO<br/><input type="text" id="b2sell-gpt-modal-title" style="width:100%;" /></label> <small><span id="b2sell-gpt-title-count">0</span> caracteres</small><div id="b2sell-gpt-title-warning" style="color:#c00;display:none;"></div></p>';
+        echo '<p><label>Meta description<br/><textarea id="b2sell-gpt-modal-desc" rows="3" style="width:100%;"></textarea></label> <small><span id="b2sell-gpt-desc-count">0</span> caracteres</small><div id="b2sell-gpt-desc-warning" style="color:#c00;display:none;"></div></p>';
         echo '<div id="b2sell-gpt-error" style="color:#c00;display:none;"></div>';
         echo '<div class="b2sell-snippet-preview"><div class="b2sell-snippet-tabs"><button type="button" class="b2sell-snippet-tab active" data-view="desktop">Vista Desktop</button><button type="button" class="b2sell-snippet-tab" data-view="mobile">Vista Móvil</button></div><div class="b2sell-snippet-desktop b2sell-snippet-view"><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-url">' . esc_html( home_url() ) . '</span><span class="b2sell-snippet-desc"></span></div><div class="b2sell-snippet-mobile b2sell-snippet-view" style="display:none;"><span class="b2sell-snippet-url">' . esc_html( home_url() ) . '</span><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-desc"></span></div></div>';
         echo '<p><button class="button button-primary" id="b2sell-gpt-apply">Aplicar</button> <button class="button" id="b2sell-gpt-cancel">Cerrar</button></p>';
@@ -143,9 +143,9 @@ class B2Sell_SEO_Analysis {
                 var t=$('#b2sell-meta-modal-title').val();
                 var d=$('#b2sell-meta-modal-desc').val();
                 $('#b2sell-modal-title-count').text(t.length).css('color',t.length>60?'red':'');
-                $('#b2sell-modal-title-warning').toggle(t.length>60);
+                $('#b2sell-modal-title-warning').text('Excede por '+(t.length-60)+' caracteres').toggle(t.length>60);
                 $('#b2sell-modal-desc-count').text(d.length).css('color',d.length>160?'red':'');
-                $('#b2sell-modal-desc-warning').toggle(d.length>160);
+                $('#b2sell-modal-desc-warning').text('Excede por '+(d.length-160)+' caracteres').toggle(d.length>160);
                 $('#b2sell-meta-modal .b2sell-snippet-title').text(truncate(t,60));
                 $('#b2sell-meta-modal .b2sell-snippet-desc').text(truncate(d,160));
             }
@@ -153,9 +153,9 @@ class B2Sell_SEO_Analysis {
                 var t=$('#b2sell-gpt-modal-title').val();
                 var d=$('#b2sell-gpt-modal-desc').val();
                 $('#b2sell-gpt-title-count').text(t.length).css('color',t.length>60?'red':'');
-                $('#b2sell-gpt-title-warning').toggle(t.length>60);
+                $('#b2sell-gpt-title-warning').text('Excede por '+(t.length-60)+' caracteres').toggle(t.length>60);
                 $('#b2sell-gpt-desc-count').text(d.length).css('color',d.length>160?'red':'');
-                $('#b2sell-gpt-desc-warning').toggle(d.length>160);
+                $('#b2sell-gpt-desc-warning').text('Excede por '+(d.length-160)+' caracteres').toggle(d.length>160);
                 $('#b2sell-meta-gpt .b2sell-snippet-title').text(truncate(t,60));
                 $('#b2sell-meta-gpt .b2sell-snippet-desc').text(truncate(d,160));
             }
