@@ -200,7 +200,12 @@ class B2Sell_Competencia {
                 var pid = $("#b2sell_comp_post").val();
                 if(!kws.length){return;}
                 $("#b2sell_comp_results").html("Buscando...");
-                $.post(ajaxurl,{action:"b2sell_competencia_search",keywords:kws,post_id:pid,_wpnonce:b2sellCompNonce},function(res){
+                $.ajax({
+                    url: ajaxurl,
+                    method: "POST",
+                    dataType: "json",
+                    data: {action:"b2sell_competencia_search",keywords:kws,post_id:pid,_wpnonce:b2sellCompNonce}
+                }).done(function(res){
                     if(res.success){
                         b2sellCompResults = {};
                         b2sellCompFlows = {};
@@ -245,6 +250,9 @@ class B2Sell_Competencia {
                     }else{
                         $("#b2sell_comp_results").html("<div class=\"error\"><p>"+res.data+"</p></div>");
                     }
+                }).fail(function(jqXHR){
+                    var msg = jqXHR.responseText || "Error al realizar la búsqueda";
+                    $("#b2sell_comp_results").html("<div class=\"error\"><p>"+msg+"</p></div>");
                 });
             });
             $(document).on("click",".b2sell_comp_opt_btn",function(){
