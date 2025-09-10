@@ -207,12 +207,15 @@ class B2Sell_Competencia {
                         kws.forEach(function(kw){
                             var dataKw = res.data[kw] || {};
                             var list = dataKw.items || [];
+                            var volume = dataKw.volume || 0;
+                            var volTxt = volume ? volume : \'N/A\';
                             b2sellCompResults[kw] = list;
                             html += "<div class=\"b2sell-comp-block\" data-key=\""+kw+"\"><h2>"+kw+"</h2>";
                             if(list.length){
-                                html += "<table class=\\"widefat\\"><thead><tr><th>Competidor</th><th>Descripción</th><th>URL</th></tr></thead><tbody>";
+                                html += "<table class=\\"widefat\\"><thead><tr><th>Competidor</th><th>Descripción</th><th>URL</th><th>Volumen de búsqueda</th><th>Tráfico estimado</th></tr></thead><tbody>";
                                 list.forEach(function(r){
-                                    html += "<tr><td>"+r.title+"</td><td>"+r.snippet+"</td><td><a href=\\""+r.link+"\\" target=\\"_blank\\">"+r.link+"</a></td></tr>";
+                                    var trafTxt = volume ? r.traffic : \'N/A\';
+                                    html += "<tr><td>"+r.title+"</td><td>"+r.snippet+"</td><td><a href=\\""+r.link+"\\" target=\\"_blank\\">"+r.link+"</a></td><td>"+volTxt+"</td><td>"+trafTxt+"</td></tr>";
                                 });
                                 html += "</tbody></table>";
                                 if(pid){html += "<button class=\\"button b2sell_comp_opt_btn\\" data-keyword=\\""+kw+"\\" style=\\"margin-top:10px;\\">Optimizar con GPT</button>";}
