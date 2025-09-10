@@ -106,9 +106,10 @@ class B2Sell_SEO_Analysis {
         echo '<h2 style="margin-top:40px;">Metadatos SEO</h2>';
         echo '<table class="widefat" id="b2sell-meta-table"><thead><tr><th>Título</th><th>Título SEO</th><th>Meta description</th><th>Acciones</th></tr></thead><tbody>';
         foreach ( $posts as $p ) {
-            $t = get_post_meta( $p->ID, '_b2sell_seo_title', true );
-            $d = get_post_meta( $p->ID, '_b2sell_seo_description', true );
-            echo '<tr data-id="' . esc_attr( $p->ID ) . '"><td>' . esc_html( $p->post_title ) . '</td><td class="b2sell-meta-title">' . esc_html( $t ) . '</td><td class="b2sell-meta-desc">' . esc_html( $d ) . '</td><td><button class="button b2sell-meta-edit">Editar</button> <button class="button b2sell-meta-gpt">Generar con GPT</button></td></tr>';
+            $t       = get_post_meta( $p->ID, '_b2sell_seo_title', true );
+            $d       = get_post_meta( $p->ID, '_b2sell_seo_description', true );
+            $content = esc_attr( mb_substr( wp_strip_all_tags( $p->post_content ), 0, 1200 ) );
+            echo '<tr data-id="' . esc_attr( $p->ID ) . '" data-content="' . $content . '"><td>' . esc_html( $p->post_title ) . '</td><td class="b2sell-meta-title">' . esc_html( $t ) . '</td><td class="b2sell-meta-desc">' . esc_html( $d ) . '</td><td><button class="button b2sell-meta-edit">Editar</button> <button class="button b2sell-meta-gpt">Generar con GPT</button></td></tr>';
         }
         echo '</tbody></table>';
 
@@ -125,8 +126,9 @@ class B2Sell_SEO_Analysis {
         echo '<h2>Sugerencias GPT</h2>';
         echo '<p><label>Título SEO<br/><input type="text" id="b2sell-gpt-modal-title" style="width:100%;" /></label> <small><span id="b2sell-gpt-title-count">0</span> caracteres</small><div id="b2sell-gpt-title-warning" style="color:#c00;display:none;">Se recomienda máximo 60 caracteres para el título</div></p>';
         echo '<p><label>Meta description<br/><textarea id="b2sell-gpt-modal-desc" rows="3" style="width:100%;"></textarea></label> <small><span id="b2sell-gpt-desc-count">0</span> caracteres</small><div id="b2sell-gpt-desc-warning" style="color:#c00;display:none;">Se recomienda máximo 160 caracteres para la meta description</div></p>';
+        echo '<div id="b2sell-gpt-error" style="color:#c00;display:none;"></div>';
         echo '<div class="b2sell-snippet-preview"><div class="b2sell-snippet-tabs"><button type="button" class="b2sell-snippet-tab active" data-view="desktop">Vista Desktop</button><button type="button" class="b2sell-snippet-tab" data-view="mobile">Vista Móvil</button></div><div class="b2sell-snippet-desktop b2sell-snippet-view"><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-url">' . esc_html( home_url() ) . '</span><span class="b2sell-snippet-desc"></span></div><div class="b2sell-snippet-mobile b2sell-snippet-view" style="display:none;"><span class="b2sell-snippet-url">' . esc_html( home_url() ) . '</span><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-desc"></span></div></div>';
-        echo '<p><button class="button button-primary" id="b2sell-gpt-save">Guardar</button> <button class="button" id="b2sell-gpt-cancel">Cerrar</button></p>';
+        echo '<p><button class="button button-primary" id="b2sell-gpt-apply">Aplicar</button> <button class="button" id="b2sell-gpt-cancel">Cerrar</button></p>';
         echo '</div></div>';
 
         $nonce = wp_create_nonce( 'b2sell_seo_meta' );
@@ -168,17 +170,22 @@ class B2Sell_SEO_Analysis {
             $('#b2sell-meta-table').on('click','.b2sell-meta-gpt',function(){
                 var row=$(this).closest('tr');
                 currentId=row.data('id');
+                var content=row.data('content');
                 $('#b2sell-gpt-modal-title').val('');
                 $('#b2sell-gpt-modal-desc').val('');
+                $('#b2sell-gpt-error').hide().text('');
                 $('#b2sell-meta-gpt').css('display','flex');
                 updateGpt();
-                $.when(
-                    $.post(ajaxurl,{action:'b2sell_gpt_generate',gpt_action:'title',post_id:currentId,_wpnonce:b2sellSeoNonce}),
-                    $.post(ajaxurl,{action:'b2sell_gpt_generate',gpt_action:'meta',post_id:currentId,_wpnonce:b2sellSeoNonce})
-                ).done(function(tRes,mRes){
-                    if(tRes[0].success){$('#b2sell-gpt-modal-title').val(tRes[0].data.content);}
-                    if(mRes[0].success){$('#b2sell-gpt-modal-desc').val(mRes[0].data.content);}
-                    updateGpt();
+                $.post(ajaxurl,{action:'b2sell_generate_meta',post_id:currentId,content:content,_wpnonce:b2sellSeoNonce},function(res){
+                    if(res.success){
+                        $('#b2sell-gpt-modal-title').val(res.data.title);
+                        $('#b2sell-gpt-modal-desc').val(res.data.description);
+                        updateGpt();
+                    }else{
+                        $('#b2sell-gpt-error').text(res.data.message||res.data).show();
+                    }
+                }).fail(function(){
+                    $('#b2sell-gpt-error').text('Error al conectar con el servidor').show();
                 });
             });
             $('#b2sell-meta-cancel').on('click',function(){ $('#b2sell-meta-modal').hide(); });
@@ -196,7 +203,7 @@ class B2Sell_SEO_Analysis {
                     $('#b2sell-meta-modal').hide();
                 });
             });
-            $('#b2sell-gpt-save').on('click',function(){
+            $('#b2sell-gpt-apply').on('click',function(){
                 $.post(ajaxurl,{action:'b2sell_save_seo_meta',post_id:currentId,title:$('#b2sell-gpt-modal-title').val(),description:$('#b2sell-gpt-modal-desc').val(),nonce:b2sellSeoNonce},function(res){
                     alert(res.success?'Guardado':'Error');
                     if(res.success){
