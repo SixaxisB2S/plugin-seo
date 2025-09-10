@@ -234,12 +234,14 @@ class B2Sell_SEO_Assistant {
         $google_cx     = get_option( 'b2sell_google_cx', '' );
         $google_gl     = get_option( 'b2sell_google_gl', 'cl' );
         $google_hl     = get_option( 'b2sell_google_hl', 'es' );
+        $serpapi_key   = get_option( 'b2sell_serpapi_key', '' );
+        $provider      = get_option( 'b2sell_comp_provider', 'google' );
         $ads_dev       = get_option( 'b2sell_ads_developer_token', '' );
         $ads_client    = get_option( 'b2sell_ads_client_id', '' );
         $ads_secret    = get_option( 'b2sell_ads_client_secret', '' );
         $ads_refresh   = get_option( 'b2sell_ads_refresh_token', '' );
         $ads_customer  = get_option( 'b2sell_ads_customer_id', '' );
-        if ( isset( $_POST['b2sell_openai_api_key'] ) || isset( $_POST['b2sell_pagespeed_api_key'] ) || isset( $_POST['b2sell_google_api_key'] ) || isset( $_POST['b2sell_google_cx'] ) || isset( $_POST['b2sell_google_gl'] ) || isset( $_POST['b2sell_google_hl'] ) || isset( $_POST['b2sell_ads_developer_token'] ) ) {
+        if ( isset( $_POST['b2sell_openai_api_key'] ) || isset( $_POST['b2sell_pagespeed_api_key'] ) || isset( $_POST['b2sell_google_api_key'] ) || isset( $_POST['b2sell_google_cx'] ) || isset( $_POST['b2sell_google_gl'] ) || isset( $_POST['b2sell_google_hl'] ) || isset( $_POST['b2sell_ads_developer_token'] ) || isset( $_POST['b2sell_serpapi_key'] ) || isset( $_POST['b2sell_comp_provider'] ) ) {
             check_admin_referer( 'b2sell_save_api_key' );
             $openai_key    = sanitize_text_field( $_POST['b2sell_openai_api_key'] ?? '' );
             $pagespeed_key = sanitize_text_field( $_POST['b2sell_pagespeed_api_key'] ?? '' );
@@ -247,6 +249,8 @@ class B2Sell_SEO_Assistant {
             $google_cx     = sanitize_text_field( $_POST['b2sell_google_cx'] ?? '' );
             $google_gl     = sanitize_text_field( $_POST['b2sell_google_gl'] ?? '' );
             $google_hl     = sanitize_text_field( $_POST['b2sell_google_hl'] ?? '' );
+            $serpapi_key   = sanitize_text_field( $_POST['b2sell_serpapi_key'] ?? '' );
+            $provider      = sanitize_text_field( $_POST['b2sell_comp_provider'] ?? 'google' );
             if ( '' === $google_gl ) {
                 $google_gl = 'cl';
             }
@@ -264,6 +268,8 @@ class B2Sell_SEO_Assistant {
             update_option( 'b2sell_google_cx', $google_cx );
             update_option( 'b2sell_google_gl', $google_gl );
             update_option( 'b2sell_google_hl', $google_hl );
+            update_option( 'b2sell_serpapi_key', $serpapi_key );
+            update_option( 'b2sell_comp_provider', $provider );
             update_option( 'b2sell_ads_developer_token', $ads_dev );
             update_option( 'b2sell_ads_client_id', $ads_client );
             update_option( 'b2sell_ads_client_secret', $ads_secret );
@@ -279,6 +285,8 @@ class B2Sell_SEO_Assistant {
         echo '<input type="text" id="b2sell_openai_api_key" name="b2sell_openai_api_key" value="' . esc_attr( $openai_key ) . '" style="width:400px;" /></p>';
         echo '<p><label for="b2sell_pagespeed_api_key">Google PageSpeed API Key:</label> ';
         echo '<input type="text" id="b2sell_pagespeed_api_key" name="b2sell_pagespeed_api_key" value="' . esc_attr( $pagespeed_key ) . '" style="width:400px;" /></p>';
+        echo '<h2>Proveedor de datos</h2>';
+        echo '<p><label for="b2sell_comp_provider">Proveedor:</label> <select id="b2sell_comp_provider" name="b2sell_comp_provider"><option value="google"' . selected( $provider, 'google', false ) . '>Google Custom Search</option><option value="serpapi"' . selected( $provider, 'serpapi', false ) . '>SerpAPI</option></select></p>';
         echo '<h2>Google Custom Search</h2>';
         echo '<p>La <strong>API Key</strong> y el <strong>ID del motor de búsqueda (CX)</strong> son necesarios para realizar la búsqueda de competencia. Obtén estos valores en <a href="https://developers.google.com/custom-search/v1/introduction" target="_blank">Google Custom Search</a>.</p>';
         echo '<p><label for="b2sell_google_api_key">Google Custom Search API Key:</label> ';
@@ -289,6 +297,8 @@ class B2Sell_SEO_Assistant {
         echo '<input type="text" id="b2sell_google_gl" name="b2sell_google_gl" value="' . esc_attr( $google_gl ) . '" style="width:400px;" /></p>';
         echo '<p><label for="b2sell_google_hl">Idioma (hl):</label> ';
         echo '<input type="text" id="b2sell_google_hl" name="b2sell_google_hl" value="' . esc_attr( $google_hl ) . '" style="width:400px;" /></p>';
+        echo '<h2>SerpAPI</h2>';
+        echo '<p><label for="b2sell_serpapi_key">SerpAPI Key:</label> <input type="text" id="b2sell_serpapi_key" name="b2sell_serpapi_key" value="' . esc_attr( $serpapi_key ) . '" style="width:400px;" /></p>';
         echo '<h2>Google Ads Keyword Planner</h2>';
         echo '<p><label for="b2sell_ads_developer_token">Developer Token:</label> ';
         echo '<input type="text" id="b2sell_ads_developer_token" name="b2sell_ads_developer_token" value="' . esc_attr( $ads_dev ) . '" style="width:400px;" /></p>';

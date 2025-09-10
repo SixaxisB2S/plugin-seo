@@ -187,14 +187,17 @@ class B2Sell_Competencia {
                 'url'   => get_permalink( $p->ID ),
             );
         }
-        $api_key = get_option( 'b2sell_google_api_key', '' );
-        $cx      = get_option( 'b2sell_google_cx', '' );
+        $api_key     = get_option( 'b2sell_google_api_key', '' );
+        $cx          = get_option( 'b2sell_google_cx', '' );
+        $serpapi_key = get_option( 'b2sell_serpapi_key', '' );
+        $provider    = get_option( 'b2sell_comp_provider', 'google' );
         global $wpdb;
         $history = $wpdb->get_results( "SELECT * FROM {$this->table} ORDER BY date DESC LIMIT 20" );
         echo '<div class="wrap">';
-        if ( ! $api_key || ! $cx ) {
+        if ( ( 'google' === $provider && ( ! $api_key || ! $cx ) ) || ( 'serpapi' === $provider && ! $serpapi_key ) ) {
             $link = esc_url( admin_url( 'admin.php?page=b2sell-seo-config' ) );
-            echo '<div class="error"><p>Google Custom Search no está configurado. Configura la API Key y el ID del motor de búsqueda (CX) en la <a href="' . $link . '">página de Configuración</a>.</p></div>';
+            $msg  = ( 'google' === $provider ) ? 'Google Custom Search no está configurado. Configura la API Key y el ID del motor de búsqueda (CX)' : 'SerpAPI no está configurado. Configura la API Key';
+            echo '<div class="error"><p>' . $msg . ' en la <a href="' . $link . '">página de Configuración</a>.</p></div>';
         }
         echo '<h1>Competencia</h1>';
         echo '<h2 class="nav-tab-wrapper"><a href="#" class="nav-tab nav-tab-active" data-tab="analysis">Análisis</a><a href="#" class="nav-tab" data-tab="history">Histórico</a></h2>';
@@ -368,6 +371,8 @@ class B2Sell_Competencia {
         $post_id  = intval( $_POST['post_id'] ?? 0 );
         $api_key  = get_option( 'b2sell_google_api_key', '' );
         $cx       = get_option( 'b2sell_google_cx', '' );
+        $serpapi  = get_option( 'b2sell_serpapi_key', '' );
+        $provider = get_option( 'b2sell_comp_provider', 'google' );
         $gl       = get_option( 'b2sell_google_gl', 'cl' );
         $hl       = get_option( 'b2sell_google_hl', 'es' );
         $gl       = $gl ? $gl : 'cl';
@@ -375,48 +380,89 @@ class B2Sell_Competencia {
         if ( empty( $keywords ) ) {
             wp_send_json_error( 'Palabras clave vacías' );
         }
-        if ( ! $api_key || ! $cx ) {
-            wp_send_json_error( 'API Key o CX no configurados. Configura los valores en la página de Configuración.' );
+        if ( ( 'google' === $provider && ( ! $api_key || ! $cx ) ) || ( 'serpapi' === $provider && ! $serpapi ) ) {
+            wp_send_json_error( 'Proveedor de datos no configurado correctamente. Revisa la configuración.' );
         }
         $results = array();
         $my_url  = $post_id ? get_permalink( $post_id ) : '';
         $volumes = $this->get_keyword_volumes( $keywords );
         foreach ( $keywords as $keyword ) {
-            $url      = add_query_arg(
-                array(
-                    'key' => $api_key,
-                    'cx'  => $cx,
-                    'q'   => $keyword,
-                    'num' => 5,
-                    'gl'  => $gl,
-                    'hl'  => $hl,
-                ),
-                'https://www.googleapis.com/customsearch/v1'
-            );
-            $response = wp_remote_get( $url );
-            if ( is_wp_error( $response ) ) {
-                wp_send_json_error( $response->get_error_message() );
-            }
-            $data       = json_decode( wp_remote_retrieve_body( $response ), true );
-            $items      = $data['items'] ?? array();
             $kw_results = array();
             $my_rank    = 0;
             $volume     = $volumes[ $keyword ] ?? 0;
-            foreach ( $items as $index => $item ) {
-                $link   = $item['link'] ?? '';
-                $domain = parse_url( $link, PHP_URL_HOST );
-                $rank   = $index + 1;
-                if ( $my_url && trailingslashit( $link ) === trailingslashit( $my_url ) ) {
-                    $my_rank = $rank;
+            if ( 'serpapi' === $provider ) {
+                for ( $page = 0; $page < 5; $page++ ) {
+                    $start    = $page * 10;
+                    $url      = add_query_arg(
+                        array(
+                            'engine' => 'google',
+                            'api_key'=> $serpapi,
+                            'q'      => $keyword,
+                            'num'    => 1,
+                            'start'  => $start,
+                            'hl'     => $hl,
+                            'gl'     => $gl,
+                        ),
+                        'https://serpapi.com/search'
+                    );
+                    $response = wp_remote_get( $url );
+                    if ( is_wp_error( $response ) ) {
+                        continue;
+                    }
+                    $data = json_decode( wp_remote_retrieve_body( $response ), true );
+                    $item = $data['organic_results'][0] ?? null;
+                    if ( ! $item ) {
+                        continue;
+                    }
+                    $link   = $item['link'] ?? '';
+                    $domain = parse_url( $link, PHP_URL_HOST );
+                    $rank   = $start + 1;
+                    if ( $my_url && trailingslashit( $link ) === trailingslashit( $my_url ) ) {
+                        $my_rank = $rank;
+                    }
+                    $kw_results[] = array(
+                        'title'   => $item['title'] ?? '',
+                        'snippet' => $item['snippet'] ?? '',
+                        'link'    => $link,
+                        'domain'  => $domain,
+                        'rank'    => $rank,
+                        'traffic' => intval( $volume * $this->ctr_from_rank( $rank ) ),
+                    );
                 }
-                $kw_results[] = array(
-                    'title'   => $item['title'] ?? '',
-                    'snippet' => $item['snippet'] ?? '',
-                    'link'    => $link,
-                    'domain'  => $domain,
-                    'rank'    => $rank,
-                    'traffic' => intval( $volume * $this->ctr_from_rank( $rank ) ),
+            } else {
+                $url      = add_query_arg(
+                    array(
+                        'key' => $api_key,
+                        'cx'  => $cx,
+                        'q'   => $keyword,
+                        'num' => 5,
+                        'gl'  => $gl,
+                        'hl'  => $hl,
+                    ),
+                    'https://www.googleapis.com/customsearch/v1'
                 );
+                $response = wp_remote_get( $url );
+                if ( is_wp_error( $response ) ) {
+                    wp_send_json_error( $response->get_error_message() );
+                }
+                $data  = json_decode( wp_remote_retrieve_body( $response ), true );
+                $items = $data['items'] ?? array();
+                foreach ( $items as $index => $item ) {
+                    $link   = $item['link'] ?? '';
+                    $domain = parse_url( $link, PHP_URL_HOST );
+                    $rank   = $index + 1;
+                    if ( $my_url && trailingslashit( $link ) === trailingslashit( $my_url ) ) {
+                        $my_rank = $rank;
+                    }
+                    $kw_results[] = array(
+                        'title'   => $item['title'] ?? '',
+                        'snippet' => $item['snippet'] ?? '',
+                        'link'    => $link,
+                        'domain'  => $domain,
+                        'rank'    => $rank,
+                        'traffic' => intval( $volume * $this->ctr_from_rank( $rank ) ),
+                    );
+                }
             }
             $results[ $keyword ] = array(
                 'items'      => $kw_results,
@@ -522,54 +568,97 @@ class B2Sell_Competencia {
         if ( ! $row ) {
             wp_send_json_error( 'Registro no encontrado' );
         }
-        $keyword = $row->keyword;
-        $post_id = (int) $row->post_id;
-        $api_key = get_option( 'b2sell_google_api_key', '' );
-        $cx      = get_option( 'b2sell_google_cx', '' );
-        $gl      = get_option( 'b2sell_google_gl', 'cl' );
-        $hl      = get_option( 'b2sell_google_hl', 'es' );
-        $gl      = $gl ? $gl : 'cl';
-        $hl      = $hl ? $hl : 'es';
-        if ( ! $api_key || ! $cx ) {
-            wp_send_json_error( 'API Key o CX no configurados' );
+        $keyword  = $row->keyword;
+        $post_id  = (int) $row->post_id;
+        $api_key  = get_option( 'b2sell_google_api_key', '' );
+        $cx       = get_option( 'b2sell_google_cx', '' );
+        $serpapi  = get_option( 'b2sell_serpapi_key', '' );
+        $provider = get_option( 'b2sell_comp_provider', 'google' );
+        $gl       = get_option( 'b2sell_google_gl', 'cl' );
+        $hl       = get_option( 'b2sell_google_hl', 'es' );
+        $gl       = $gl ? $gl : 'cl';
+        $hl       = $hl ? $hl : 'es';
+        if ( ( 'google' === $provider && ( ! $api_key || ! $cx ) ) || ( 'serpapi' === $provider && ! $serpapi ) ) {
+            wp_send_json_error( 'Proveedor de datos no configurado' );
         }
-        $url      = add_query_arg(
-            array(
-                'key' => $api_key,
-                'cx'  => $cx,
-                'q'   => $keyword,
-                'num' => 5,
-                'gl'  => $gl,
-                'hl'  => $hl,
-            ),
-            'https://www.googleapis.com/customsearch/v1'
-        );
-        $response = wp_remote_get( $url );
-        if ( is_wp_error( $response ) ) {
-            wp_send_json_error( 'Error en consulta' );
-        }
-        $data      = json_decode( wp_remote_retrieve_body( $response ), true );
-        $items     = $data['items'] ?? array();
         $kw_results = array();
         $my_rank    = 0;
         $my_url     = $post_id ? get_permalink( $post_id ) : '';
         $volumes    = $this->get_keyword_volumes( array( $keyword ) );
         $volume     = $volumes[ $keyword ] ?? 0;
-        foreach ( $items as $index => $item ) {
-            $link   = $item['link'] ?? '';
-            $domain = parse_url( $link, PHP_URL_HOST );
-            $rank   = $index + 1;
-            if ( $my_url && trailingslashit( $link ) === trailingslashit( $my_url ) ) {
-                $my_rank = $rank;
+        if ( 'serpapi' === $provider ) {
+            for ( $page = 0; $page < 5; $page++ ) {
+                $start    = $page * 10;
+                $url      = add_query_arg(
+                    array(
+                        'engine' => 'google',
+                        'api_key'=> $serpapi,
+                        'q'      => $keyword,
+                        'num'    => 1,
+                        'start'  => $start,
+                        'hl'     => $hl,
+                        'gl'     => $gl,
+                    ),
+                    'https://serpapi.com/search'
+                );
+                $response = wp_remote_get( $url );
+                if ( is_wp_error( $response ) ) {
+                    continue;
+                }
+                $data = json_decode( wp_remote_retrieve_body( $response ), true );
+                $item = $data['organic_results'][0] ?? null;
+                if ( ! $item ) {
+                    continue;
+                }
+                $link   = $item['link'] ?? '';
+                $domain = parse_url( $link, PHP_URL_HOST );
+                $rank   = $start + 1;
+                if ( $my_url && trailingslashit( $link ) === trailingslashit( $my_url ) ) {
+                    $my_rank = $rank;
+                }
+                $kw_results[] = array(
+                    'title'   => $item['title'] ?? '',
+                    'snippet' => $item['snippet'] ?? '',
+                    'link'    => $link,
+                    'domain'  => $domain,
+                    'rank'    => $rank,
+                    'traffic' => intval( $volume * $this->ctr_from_rank( $rank ) ),
+                );
             }
-            $kw_results[] = array(
-                'title'   => $item['title'] ?? '',
-                'snippet' => $item['snippet'] ?? '',
-                'link'    => $link,
-                'domain'  => $domain,
-                'rank'    => $rank,
-                'traffic' => intval( $volume * $this->ctr_from_rank( $rank ) ),
+        } else {
+            $url      = add_query_arg(
+                array(
+                    'key' => $api_key,
+                    'cx'  => $cx,
+                    'q'   => $keyword,
+                    'num' => 5,
+                    'gl'  => $gl,
+                    'hl'  => $hl,
+                ),
+                'https://www.googleapis.com/customsearch/v1'
             );
+            $response = wp_remote_get( $url );
+            if ( is_wp_error( $response ) ) {
+                wp_send_json_error( 'Error en consulta' );
+            }
+            $data  = json_decode( wp_remote_retrieve_body( $response ), true );
+            $items = $data['items'] ?? array();
+            foreach ( $items as $index => $item ) {
+                $link   = $item['link'] ?? '';
+                $domain = parse_url( $link, PHP_URL_HOST );
+                $rank   = $index + 1;
+                if ( $my_url && trailingslashit( $link ) === trailingslashit( $my_url ) ) {
+                    $my_rank = $rank;
+                }
+                $kw_results[] = array(
+                    'title'   => $item['title'] ?? '',
+                    'snippet' => $item['snippet'] ?? '',
+                    'link'    => $link,
+                    'domain'  => $domain,
+                    'rank'    => $rank,
+                    'traffic' => intval( $volume * $this->ctr_from_rank( $rank ) ),
+                );
+            }
         }
         $wpdb->insert(
             $this->table,
