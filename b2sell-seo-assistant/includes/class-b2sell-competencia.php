@@ -192,6 +192,7 @@ class B2Sell_Competencia {
         $cx          = get_option( 'b2sell_google_cx', '' );
         $serpapi_key = get_option( 'b2sell_serpapi_key', '' );
         $provider    = get_option( 'b2sell_comp_provider', 'google' );
+        $competitors = get_option( 'b2sell_comp_domains', array() );
         global $wpdb;
         $history = $wpdb->get_results( "SELECT * FROM {$this->table} ORDER BY date DESC LIMIT 20" );
         echo '<div class="wrap">';
@@ -204,33 +205,29 @@ class B2Sell_Competencia {
         echo '<h2 class="nav-tab-wrapper"><a href="#" class="nav-tab nav-tab-active" data-tab="analysis">Análisis</a><a href="#" class="nav-tab" data-tab="history">Histórico</a></h2>';
 
         echo '<div id="b2sell_comp_tab_analysis" class="b2sell-comp-tab">';
-        echo '<p>Ingresa hasta 5 palabras clave (una por línea) y selecciona una página o post de tu sitio para comparar.</p>';
+        echo '<p>Ingresa hasta 10 palabras clave (una por línea) y hasta 5 dominios competidores.</p>';
         echo '<textarea id="b2sell_comp_keywords" placeholder="Palabras clave" style="width:300px;height:100px;"></textarea> ';
-        echo '<select id="b2sell_comp_post"><option value="">Selecciona un post/página</option>';
-        foreach ( $posts as $p ) {
-            echo '<option value="' . esc_attr( $p->ID ) . '">' . esc_html( $p->post_title ) . '</option>';
-        }
-        echo '</select> ';
+        echo '<textarea id="b2sell_comp_domains" placeholder="competidor1.com\ncompetidor2.com" style="width:300px;height:100px;margin-left:20px;">' . esc_textarea( implode( "\n", $competitors ) ) . '</textarea> ';
         echo '<button class="button" id="b2sell_comp_search_btn">Buscar</button>';
         echo '<div id="b2sell_comp_results" style="margin-top:20px;"></div>';
         echo '</div>';
 
         echo '<div id="b2sell_comp_tab_history" class="b2sell-comp-tab" style="display:none;">';
-        echo '<table class="widefat"><thead><tr><th>Fecha</th><th>Keyword</th><th>Ranking competidores</th><th>Proveedor</th><th>Acciones</th></tr></thead><tbody>';
+        echo '<table class="widefat"><thead><tr><th>Fecha</th><th>Keyword</th><th>Ranking competidores</th><th>Proveedor</th></tr></thead><tbody>';
         if ( $history ) {
             foreach ( $history as $row ) {
                 $results   = json_decode( $row->results, true );
                 $rank_html = '';
                 if ( $results ) {
                     foreach ( $results as $res ) {
-                        $rank_html .= $res['rank'] . '. ' . esc_html( $res['title'] ) . '<br>';
+                        $rank_html .= esc_html( $res['domain'] ) . ': ' . intval( $res['rank'] ) . '<br>';
                     }
                 }
                 $prov_label = ( 'serpapi' === $row->provider ) ? 'SerpAPI' : 'Google Custom Search';
-                echo '<tr><td>' . esc_html( $row->date ) . '</td><td>' . esc_html( $row->keyword ) . '</td><td>' . $rank_html . '</td><td>' . esc_html( $prov_label ) . '</td><td><button class="button b2sell_comp_detail" data-id="' . esc_attr( $row->id ) . '">Ver detalles</button> <button class="button b2sell_comp_rean" data-id="' . esc_attr( $row->id ) . '">Reanalizar</button></td></tr>';
+                echo '<tr><td>' . esc_html( $row->date ) . '</td><td>' . esc_html( $row->keyword ) . '</td><td>' . $rank_html . '</td><td>' . esc_html( $prov_label ) . '</td></tr>';
             }
         } else {
-            echo '<tr><td colspan="5">Sin análisis previos.</td></tr>';
+            echo '<tr><td colspan="4">Sin análisis previos.</td></tr>';
         }
         echo '</tbody></table>';
         echo '</div>';
@@ -245,122 +242,41 @@ class B2Sell_Competencia {
 
         echo '<div id="b2sell_comp_hist_modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);">';
         echo '<div style="background:#fff;padding:20px;max-width:800px;margin:50px auto;"><div id="b2sell_comp_hist_modal_content"></div><button class="button" id="b2sell_comp_hist_close">Cerrar</button></div></div>';
-
-        echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
-        echo '<script>var b2sellCompPosts=' . wp_json_encode( $posts_js ) . ';var b2sellCompNonce="' . esc_js( $nonce ) . '";var b2sellCompResults={};var b2sellCompFlows={};</script>';
+        echo '<script>var b2sellCompNonce="' . esc_js( $nonce ) . '";</script>';
         echo '<script>
         jQuery(function($){
             $(".nav-tab-wrapper .nav-tab").on("click",function(e){e.preventDefault();var t=$(this).data("tab");$(".nav-tab").removeClass("nav-tab-active");$(this).addClass("nav-tab-active");$(".b2sell-comp-tab").hide();$("#b2sell_comp_tab_"+t).show();});
             $("#b2sell_comp_search_btn").on("click", function(){
-                var kws = $("#b2sell_comp_keywords").val().split(/\n+/)
+                var kws = $("#b2sell_comp_keywords").val().split(/\\n+/)
+                    .map(function(s){return $.trim(s);})
+                    .filter(function(s){return s.length;})
+                    .slice(0,10);
+                var doms = $("#b2sell_comp_domains").val().split(/\\n+/)
                     .map(function(s){return $.trim(s);})
                     .filter(function(s){return s.length;})
                     .slice(0,5);
-                var pid = $("#b2sell_comp_post").val();
                 if(!kws.length){return;}
-                $("#b2sell_comp_results").html("Buscando...");
-                $.ajax({
-                    url: ajaxurl,
-                    method: "POST",
-                    dataType: "json",
-                    data: {action:"b2sell_competencia_search",keywords:kws,post_id:pid,_wpnonce:b2sellCompNonce}
-                }).done(function(res){
+                $("#b2sell_comp_results").html("Analizando...");
+                $.post(ajaxurl,{action:"b2sell_competencia_search",keywords:kws,competitors:doms,_wpnonce:b2sellCompNonce},function(res){
                     if(res.success){
-                        b2sellCompResults = {};
-                        b2sellCompFlows = {};
-                        var html = "";
+                        var data=res.data;
+                        var comps=data.competitors;
+                        var html="<table class=\\"widefat\\"><thead><tr><th>Keyword</th><th>"+data.domain+"</th>";
+                        comps.forEach(function(c){html+="<th>"+c+"</th>";});
+                        html+="</tr></thead><tbody>";
                         kws.forEach(function(kw){
-                            var dataKw = res.data[kw] || {};
-                            var list = dataKw.items || [];
-                            var volume = dataKw.volume || 0;
-                            var volTxt = volume ? volume : "N/A";
-                            b2sellCompResults[kw] = list;
-                            var flow = dataKw.traffic_flow || null;
-                            if(flow){ b2sellCompFlows[kw] = flow; }
-                            html += "<div class=\"b2sell-comp-block\" data-key=\""+kw+"\"><h2>"+kw+"</h2>";
-                            if(list.length){
-                                html += "<table class=\\"widefat\\"><thead><tr><th>Competidor</th><th>Descripción</th><th>URL</th><th>Volumen de búsqueda</th><th>Tráfico estimado</th></tr></thead><tbody>";
-                                list.forEach(function(r){
-                                    var trafTxt = volume ? r.traffic : "N/A";
-                                    html += "<tr><td>"+r.title+"</td><td>"+r.snippet+"</td><td><a href=\\""+r.link+"\\" target=\\"_blank\\">"+r.link+"</a></td><td>"+volTxt+"</td><td>"+trafTxt+"</td></tr>";
-                                });
-                                html += "</tbody></table>";
-                                if(pid){html += "<button class=\\"button b2sell_comp_opt_btn\\" data-keyword=\\""+kw+"\\" style=\\"margin-top:10px;\\">Optimizar con GPT</button>";}
-                            }else{
-                                html += "<p>No se encontraron resultados para esta keyword</p>";
-                            }
-                            if(flow){
-                                html += "<canvas class=\"b2sell-comp-flow\" data-key=\""+kw+"\" height=\"100\" style=\"margin-top:20px\"></canvas><div class=\"b2sell-comp-interpret\" data-key=\""+kw+"\" style=\"margin-top:10px\"></div>";
-                            }
-                            html += "</div>";
+                            var row=data.results[kw]||{};
+                            html+="<tr><td>"+kw+"</td><td>"+(row.mine||"-")+"</td>";
+                            comps.forEach(function(c){var r=row.competitors&&row.competitors[c]?row.competitors[c]:"-";html+="<td>"+r+"</td>";});
+                            html+="</tr>";
                         });
+                        html+="</tbody></table>";
                         $("#b2sell_comp_results").html(html);
-                        Object.keys(b2sellCompFlows).forEach(function(key){
-                            var flow=b2sellCompFlows[key];
-                            var $canvas=$("canvas.b2sell-comp-flow[data-key=\'"+key+"\']");
-                            if($canvas.length){
-                                var ctx=$canvas[0].getContext("2d");
-                                new Chart(ctx,{type:"bar",data:{labels:["Actual","3","2","1"],datasets:[{label:"Tráfico estimado",data:[flow.current,flow.pos3,flow.pos2,flow.pos1],backgroundColor:["#f44336","#ffeb3b","#ffeb3b","#4caf50"]}]},options:{scales:{y:{beginAtZero:true}}}});
-                                var $div=$(".b2sell-comp-interpret[data-key=\'"+key+"\']");
-                                $.post(ajaxurl,{action:"b2sell_competencia_interpret",rank:flow.current_rank,current:flow.current,pos3:flow.pos3,pos2:flow.pos2,pos1:flow.pos1,keyword:key,_wpnonce:b2sellCompNonce},function(resp){
-                                    if(resp.success){$div.text(resp.data.text);}else{$div.text(resp.data);} });
-                            }
-                        });
                     }else{
-                        console.error("Error en búsqueda:", res);
-                        $("#b2sell_comp_results").html("<div class=\"error\"><p>"+res.data+"</p></div>");
+                        $("#b2sell_comp_results").html("<div class=\\"error\\"><p>"+res.data+"</p></div>");
                     }
-                }).fail(function(jqXHR){
-                    var msg = jqXHR.responseText || "Error al realizar la búsqueda";
-                    console.error("Error al realizar la búsqueda:", jqXHR);
-                    $("#b2sell_comp_results").html("<div class=\"error\"><p>"+msg+"</p></div>");
-                });
+                },"json");
             });
-            $(document).on("click",".b2sell_comp_opt_btn",function(){
-                var pid = $("#b2sell_comp_post").val();
-                if(!pid){return;}
-                var kw = $(this).data("keyword");
-                var btn = $(this);
-                btn.prop("disabled",true).text("Generando...");
-                $.post(ajaxurl,{action:"b2sell_competencia_optimize",post_id:pid,keyword:kw,results:b2sellCompResults[kw]||[],_wpnonce:b2sellCompNonce},function(res){
-                    btn.prop("disabled",false).text("Optimizar con GPT");
-                    if(res.success){
-                        var s=res.data;
-                        $("#b2sell_comp_suggestions").html("<h3>Título sugerido</h3><p>"+s.title+"</p><h3>Meta description sugerida</h3><p>"+s.meta+"</p><h3>Keywords relacionadas</h3><p>"+s.keywords.join(", ")+"</p>");
-                        $("#b2sell_comp_insert").data("post",pid).data("title",s.title).data("meta",s.meta).data("keyword",kw).data("suggestions",s);
-                        $("#b2sell_comp_modal").show();
-                    }else{
-                        alert(res.data && res.data.message?res.data.message:res.data);
-                    }
-                });
-            });
-            $("#b2sell_comp_close").on("click",function(){$("#b2sell_comp_modal").hide();});
-            $("#b2sell_comp_copy").on("click",function(){var t=$("#b2sell_comp_suggestions").text();navigator.clipboard.writeText(t);});
-            $("#b2sell_comp_export").on("click",function(){var s=$("#b2sell_comp_insert").data("suggestions")||{};var kw=$("#b2sell_comp_insert").data("keyword")||"";var csv="Keyword,Título,Meta description,Keywords relacionadas\n";var row=[kw,s.title||"",s.meta||"",(s.keywords||[]).join(" ")];for(var i=0;i<row.length;i++){row[i]="\""+String(row[i]).replace(/"/g,"\"\"")+"\"";}csv+=row.join(",")+"\n";var blob=new Blob([csv],{type:"text/csv"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="gpt_sugerencias_"+kw+".csv";a.click();});
-            $("#b2sell_comp_insert").on("click",function(){var pid=$(this).data("post"),title=$(this).data("title"),meta=$(this).data("meta");$.post(ajaxurl,{action:"b2sell_competencia_insert",post_id:pid,title:title,meta:meta,_wpnonce:b2sellCompNonce},function(){alert("Insertado" );});});
-            $(document).on("click",".b2sell_comp_detail",function(){
-                var id=$(this).data("id");
-                $.post(ajaxurl,{action:"b2sell_competencia_history_detail",id:id,_wpnonce:b2sellCompNonce},function(res){
-                    if(res.success){
-                        var r=res.data.record;
-                        var provLabel = r.provider==="serpapi"?"SerpAPI":"Google Custom Search";
-                        var html="<h2>"+r.keyword+" - "+r.date+" ("+provLabel+")</h2>";
-                        html+="<table class=\\"widefat\\"><thead><tr><th>Posición</th><th>Título</th><th>Meta</th><th>URL</th></tr></thead><tbody>";
-                        r.results.forEach(function(it){html+="<tr><td>"+it.rank+"</td><td>"+it.title+"</td><td>"+it.snippet+"</td><td><a href=\\""+it.link+"\\" target=\\"_blank\\">"+it.link+"</a></td></tr>";});
-                        html+="</tbody></table><canvas id=\\"b2sell_comp_chart\\" height=\\"100\\" style=\\"margin-top:20px\\"></canvas>";
-                        $("#b2sell_comp_hist_modal_content").html(html);
-                        $("#b2sell_comp_hist_modal").show();
-                        if(res.data.chart){
-                            var ctx=document.getElementById("b2sell_comp_chart").getContext("2d");
-                            var datasets=[{label:"Mi sitio",data:res.data.chart.my,borderColor:"#0073aa",fill:false}];
-                            if(res.data.chart.competitor&&res.data.chart.competitor.domain){datasets.push({label:res.data.chart.competitor.domain,data:res.data.chart.competitor.ranks,borderColor:"#cc0000",fill:false});}
-                            new Chart(ctx,{type:"line",data:{labels:res.data.chart.labels,datasets:datasets},options:{scales:{y:{reverse:true,beginAtZero:true}}}});
-                        }
-                    }else{alert(res.data);}
-                });
-            });
-            $("#b2sell_comp_hist_close").on("click",function(){$("#b2sell_comp_hist_modal").hide();});
-            $(document).on("click",".b2sell_comp_rean",function(){var id=$(this).data("id");if(!confirm("Reanalizar esta keyword?")){return;}$.post(ajaxurl,{action:"b2sell_competencia_reanalyze",id:id,_wpnonce:b2sellCompNonce},function(res){if(res.success){location.reload();}else{alert(res.data);}});});
         });
         </script>';
     }
@@ -370,135 +286,103 @@ class B2Sell_Competencia {
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( 'Permisos insuficientes' );
         }
-        $keywords = isset( $_POST['keywords'] ) ? array_slice( array_filter( array_map( 'sanitize_text_field', (array) $_POST['keywords'] ) ), 0, 5 ) : array();
-        $post_id  = intval( $_POST['post_id'] ?? 0 );
+        $keywords    = isset( $_POST['keywords'] ) ? array_slice( array_filter( array_map( 'sanitize_text_field', (array) $_POST['keywords'] ) ), 0, 10 ) : array();
+        $competitors = isset( $_POST['competitors'] ) ? array_slice( array_filter( array_map( 'sanitize_text_field', (array) $_POST['competitors'] ) ), 0, 5 ) : array();
+        update_option( 'b2sell_comp_domains', $competitors );
         $api_key  = get_option( 'b2sell_google_api_key', '' );
         $cx       = get_option( 'b2sell_google_cx', '' );
         $serpapi  = get_option( 'b2sell_serpapi_key', '' );
         $provider = get_option( 'b2sell_comp_provider', 'google' );
         $gl       = get_option( 'b2sell_google_gl', 'cl' );
         $hl       = get_option( 'b2sell_google_hl', 'es' );
-        $gl       = $gl ? $gl : 'cl';
-        $hl       = $hl ? $hl : 'es';
+        $gl = $gl ? $gl : 'cl';
+        $hl = $hl ? $hl : 'es';
         if ( empty( $keywords ) ) {
             wp_send_json_error( 'Palabras clave vacías' );
         }
         if ( ( 'google' === $provider && ( ! $api_key || ! $cx ) ) || ( 'serpapi' === $provider && ! $serpapi ) ) {
             wp_send_json_error( 'Proveedor de datos no configurado correctamente. Revisa la configuración.' );
         }
+        $domain  = parse_url( home_url(), PHP_URL_HOST );
         $results = array();
-        $my_url  = $post_id ? get_permalink( $post_id ) : '';
-        $volumes = $this->get_keyword_volumes( $keywords );
         foreach ( $keywords as $keyword ) {
-            $kw_results = array();
-            $my_rank    = 0;
-            $volume     = $volumes[ $keyword ] ?? 0;
-            if ( 'serpapi' === $provider ) {
-                for ( $page = 0; $page < 5; $page++ ) {
-                    $start    = $page * 10;
-                    $url      = add_query_arg(
-                        array(
-                            'engine' => 'google',
-                            'api_key'=> $serpapi,
-                            'q'      => $keyword,
-                            'num'    => 1,
-                            'start'  => $start,
-                            'hl'     => $hl,
-                            'gl'     => $gl,
-                        ),
-                        'https://serpapi.com/search.json'
-                    );
+            $my_rank   = 0;
+            $comp_ranks = array();
+            foreach ( $competitors as $c ) {
+                $comp_ranks[ $c ] = 0;
+            }
+            $found = 0;
+            for ( $page = 0; $page < 5 && $found < ( count( $comp_ranks ) + 1 ); $page++ ) {
+                if ( 'serpapi' === $provider ) {
+                    $url = add_query_arg( array(
+                        'engine' => 'google',
+                        'api_key'=> $serpapi,
+                        'q'      => $keyword,
+                        'num'    => 10,
+                        'start'  => $page * 10,
+                        'hl'     => $hl,
+                        'gl'     => $gl,
+                    ), 'https://serpapi.com/search.json' );
                     $response = wp_remote_get( $url );
-                    if ( is_wp_error( $response ) ) {
-                        continue;
-                    }
-                    $data = json_decode( wp_remote_retrieve_body( $response ), true );
-                    $item = $data['organic_results'][0] ?? null;
-                    if ( ! $item ) {
-                        continue;
-                    }
-                    $link   = $item['link'] ?? '';
-                    $domain = parse_url( $link, PHP_URL_HOST );
-                    $rank   = $start + 1;
-                    if ( $my_url && trailingslashit( $link ) === trailingslashit( $my_url ) ) {
-                        $my_rank = $rank;
-                    }
-                    $kw_results[] = array(
-                        'title'   => $item['title'] ?? '',
-                        'snippet' => $item['snippet'] ?? '',
-                        'link'    => $link,
-                        'domain'  => $domain,
-                        'rank'    => $rank,
-                        'traffic' => intval( $volume * $this->ctr_from_rank( $rank ) ),
-                    );
+                    if ( is_wp_error( $response ) ) { continue; }
+                    $data  = json_decode( wp_remote_retrieve_body( $response ), true );
+                    $items = $data['organic_results'] ?? array();
+                } else {
+                    $url = add_query_arg( array(
+                        'key'   => $api_key,
+                        'cx'    => $cx,
+                        'q'     => $keyword,
+                        'num'   => 10,
+                        'start' => $page * 10 + 1,
+                        'gl'    => $gl,
+                        'hl'    => $hl,
+                    ), 'https://www.googleapis.com/customsearch/v1' );
+                    $response = wp_remote_get( $url );
+                    if ( is_wp_error( $response ) ) { continue; }
+                    $data  = json_decode( wp_remote_retrieve_body( $response ), true );
+                    $items = $data['items'] ?? array();
                 }
-            } else {
-                $url      = add_query_arg(
-                    array(
-                        'key' => $api_key,
-                        'cx'  => $cx,
-                        'q'   => $keyword,
-                        'num' => 5,
-                        'gl'  => $gl,
-                        'hl'  => $hl,
-                    ),
-                    'https://www.googleapis.com/customsearch/v1'
-                );
-                $response = wp_remote_get( $url );
-                if ( is_wp_error( $response ) ) {
-                    wp_send_json_error( $response->get_error_message() );
-                }
-                $data  = json_decode( wp_remote_retrieve_body( $response ), true );
-                $items = $data['items'] ?? array();
                 foreach ( $items as $index => $item ) {
-                    $link   = $item['link'] ?? '';
-                    $domain = parse_url( $link, PHP_URL_HOST );
-                    $rank   = $index + 1;
-                    if ( $my_url && trailingslashit( $link ) === trailingslashit( $my_url ) ) {
+                    $link        = $item['link'] ?? '';
+                    $item_domain = parse_url( $link, PHP_URL_HOST );
+                    $rank        = $page * 10 + $index + 1;
+                    if ( ! $my_rank && $item_domain === $domain ) {
                         $my_rank = $rank;
+                        $found++;
                     }
-                    $kw_results[] = array(
-                        'title'   => $item['title'] ?? '',
-                        'snippet' => $item['snippet'] ?? '',
-                        'link'    => $link,
-                        'domain'  => $domain,
-                        'rank'    => $rank,
-                        'traffic' => intval( $volume * $this->ctr_from_rank( $rank ) ),
-                    );
+                    foreach ( $comp_ranks as $cd => $r ) {
+                        if ( ! $r && $item_domain === $cd ) {
+                            $comp_ranks[ $cd ] = $rank;
+                            $found++;
+                        }
+                    }
                 }
             }
             $results[ $keyword ] = array(
-                'items'      => $kw_results,
-                'my_traffic' => intval( $volume * $this->ctr_from_rank( $my_rank ) ),
-                'volume'     => $volume,
-                'traffic_flow' => array(
-                    'current_rank' => $my_rank,
-                    'current'      => intval( $volume * $this->ctr_from_rank( $my_rank ) ),
-                    'pos3'         => intval( $volume * $this->ctr_from_rank( 3 ) ),
-                    'pos2'         => intval( $volume * $this->ctr_from_rank( 2 ) ),
-                    'pos1'         => intval( $volume * $this->ctr_from_rank( 1 ) ),
-                ),
+                'mine'        => $my_rank,
+                'competitors' => $comp_ranks,
             );
+            $store = array();
+            foreach ( $comp_ranks as $cd => $r ) {
+                $store[] = array( 'domain' => $cd, 'rank' => $r );
+            }
             global $wpdb;
-            $wpdb->insert(
-                $this->table,
-                array(
-                    'date'     => current_time( 'mysql' ),
-                    'keyword'  => $keyword,
-                    'keywords' => wp_json_encode( $keywords ),
-                    'post_id'  => $post_id,
-                    'results'  => wp_json_encode( $kw_results ),
-                    'my_rank'  => $my_rank,
-                    'provider' => $provider,
-                )
-            );
+            $wpdb->insert( $this->table, array(
+                'date'     => current_time( 'mysql' ),
+                'keyword'  => $keyword,
+                'keywords' => wp_json_encode( $keywords ),
+                'post_id'  => 0,
+                'results'  => wp_json_encode( $store ),
+                'my_rank'  => $my_rank,
+                'provider' => $provider,
+            ) );
         }
-        if ( empty( $results ) ) {
-            wp_send_json_error( 'Sin resultados' );
-        }
-        wp_send_json_success( $results );
+        wp_send_json_success( array(
+            'domain'      => $domain,
+            'competitors' => $competitors,
+            'results'     => $results,
+        ) );
     }
-
     public function ajax_history_detail() {
         check_ajax_referer( 'b2sell_competencia_nonce' );
         if ( ! current_user_can( 'manage_options' ) ) {
