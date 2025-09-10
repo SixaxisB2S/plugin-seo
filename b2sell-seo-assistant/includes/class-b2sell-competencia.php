@@ -282,12 +282,12 @@ class B2Sell_Competencia {
                                 html += "</tbody></table>";
                                 if(pid){html += "<button class=\\"button b2sell_comp_opt_btn\\" data-keyword=\\""+kw+"\\" style=\\"margin-top:10px;\\">Optimizar con GPT</button>";}
                             }else{
-                                html += \"<p>No se encontraron resultados para esta keyword</p>\";
+                                html += "<p>No se encontraron resultados para esta keyword</p>";
                             }
                             if(flow){
                                 html += "<canvas class=\"b2sell-comp-flow\" data-key=\""+kw+"\" height=\"100\" style=\"margin-top:20px\"></canvas><div class=\"b2sell-comp-interpret\" data-key=\""+kw+"\" style=\"margin-top:10px\"></div>";
                             }
-                            html += \"</div>\";
+                            html += "</div>";
                         });
                         $("#b2sell_comp_results").html(html);
                         Object.keys(b2sellCompFlows).forEach(function(key){
