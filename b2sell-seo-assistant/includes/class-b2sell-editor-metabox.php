@@ -33,13 +33,13 @@ class B2Sell_SEO_Editor_Metabox {
             <label for="b2sell_seo_title"><strong>Título SEO</strong></label>
             <input type="text" id="b2sell_seo_title" name="b2sell_seo_title" value="<?php echo esc_attr( $seo_title ); ?>" style="width:100%;" />
             <button type="button" class="button b2sell-field-gpt" data-field="title">Generar con GPT</button>
-            <small><span id="b2sell_title_count">0</span> caracteres</small>
+            <small><span id="b2sell_title_count">0</span> caracteres <span id="b2sell_title_indicator" class="b2sell-seo-indicator"></span></small>
         </p>
         <p>
             <label for="b2sell_seo_description"><strong>Meta description</strong></label>
             <textarea id="b2sell_seo_description" name="b2sell_seo_description" rows="3" style="width:100%;"><?php echo esc_textarea( $seo_desc ); ?></textarea>
             <button type="button" class="button b2sell-field-gpt" data-field="meta">Generar con GPT</button>
-            <small><span id="b2sell_desc_count">0</span> caracteres</small>
+            <small><span id="b2sell_desc_count">0</span> caracteres <span id="b2sell_desc_indicator" class="b2sell-seo-indicator"></span></small>
         </p>
         <div class="b2sell-snippet-preview">
             <div class="b2sell-snippet-tabs"><button type="button" class="b2sell-snippet-tab active" data-view="desktop">Vista Desktop</button><button type="button" class="b2sell-snippet-tab" data-view="mobile">Vista Móvil</button></div>
@@ -48,13 +48,24 @@ class B2Sell_SEO_Editor_Metabox {
         </div>
         <script>
         jQuery(function($){
+            function evaluateStatus(len,greenMin,greenMax,yellowLowMin,yellowLowMax,yellowHighMin,yellowHighMax){
+                if(len>=greenMin&&len<=greenMax){return 'green';}
+                if((len>=yellowLowMin&&len<=yellowLowMax)||(len>=yellowHighMin&&len<=yellowHighMax)){return 'yellow';}
+                return 'red';
+            }
+            function truncate(text,max){return text.length>max?text.substring(0,max)+'...':text;}
             function updateSeoFields(){
                 var t=$('#b2sell_seo_title').val();
                 var d=$('#b2sell_seo_description').val();
-                $('#b2sell_title_count').text(t.length);
-                $('#b2sell_desc_count').text(d.length);
-                $('.b2sell-snippet-title').text(t);
-                $('.b2sell-snippet-desc').text(d);
+                var tl=t.length;var dl=d.length;
+                $('#b2sell_title_count').text(tl);
+                $('#b2sell_desc_count').text(dl);
+                var tStatus=evaluateStatus(tl,45,60,30,44,61,70);
+                var dStatus=evaluateStatus(dl,120,160,80,119,161,180);
+                $('#b2sell_title_indicator').attr('class','b2sell-seo-indicator '+tStatus);
+                $('#b2sell_desc_indicator').attr('class','b2sell-seo-indicator '+dStatus);
+                $('.b2sell-snippet-title').text(truncate(t,70));
+                $('.b2sell-snippet-desc').text(truncate(d,180));
             }
             $('#b2sell_seo_title,#b2sell_seo_description').on('input',updateSeoFields);
             updateSeoFields();
@@ -82,8 +93,10 @@ class B2Sell_SEO_Editor_Metabox {
             function updateModalSnippet(){
                 const t=currentField==='title'?$('#b2sell-field-gpt-text').val():$('#b2sell_seo_title').val();
                 const m=currentField==='meta'?$('#b2sell-field-gpt-text').val():$('#b2sell_seo_description').val();
-                $('#b2sell-field-gpt-modal .b2sell-snippet-title').text(t);
-                $('#b2sell-field-gpt-modal .b2sell-snippet-desc').text(m);
+                const tPreview=t.length>70?t.substring(0,70)+'...':t;
+                const mPreview=m.length>180?m.substring(0,180)+'...':m;
+                $('#b2sell-field-gpt-modal .b2sell-snippet-title').text(tPreview);
+                $('#b2sell-field-gpt-modal .b2sell-snippet-desc').text(mPreview);
                 $('#b2sell-field-gpt-modal .b2sell-snippet-url').text('<?php echo esc_js( home_url() ); ?>');
             }
             $('.b2sell-field-gpt').on('click',function(){
@@ -151,6 +164,10 @@ class B2Sell_SEO_Editor_Metabox {
         .b2sell-snippet-desc{color:#5f6368;font-size:13px;line-height:1.4}
         .b2sell-snippet-desktop .b2sell-snippet-desc{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
         .b2sell-snippet-tab.active{font-weight:bold}
+        .b2sell-seo-indicator{display:inline-block;width:10px;height:10px;border-radius:50%;margin-left:5px;background:red}
+        .b2sell-seo-indicator.green{background:#2ecc71}
+        .b2sell-seo-indicator.yellow{background:#ffeb3b}
+        .b2sell-seo-indicator.red{background:#e74c3c}
         </style>
         <script>
         jQuery(function($){
@@ -158,8 +175,10 @@ class B2Sell_SEO_Editor_Metabox {
             function updateSnippet(){
                 const t=$('#b2sell-suggest-title').val()||'';
                 const m=$('#b2sell-suggest-meta').val()||'';
-                $('.b2sell-snippet-view .b2sell-snippet-title').text(t);
-                $('.b2sell-snippet-view .b2sell-snippet-desc').text(m);
+                const tPreview=t.length>70?t.substring(0,70)+'...':t;
+                const mPreview=m.length>180?m.substring(0,180)+'...':m;
+                $('.b2sell-snippet-view .b2sell-snippet-title').text(tPreview);
+                $('.b2sell-snippet-view .b2sell-snippet-desc').text(mPreview);
                 $('.b2sell-snippet-view .b2sell-snippet-url').text(b2sellSnippetUrl);
             }
             $('#b2sell-gpt-improve').on('click',function(){
