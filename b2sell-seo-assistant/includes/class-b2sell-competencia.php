@@ -285,7 +285,7 @@ class B2Sell_Competencia {
                                 html += \"<p>No se encontraron resultados para esta keyword</p>\";
                             }
                             if(flow){
-                                html += \"<canvas class=\\"b2sell-comp-flow\\" data-key=\\"\"+kw+\"\\" height=\\"100\\" style=\\"margin-top:20px\\"></canvas><div class=\\"b2sell-comp-interpret\\" data-key=\\"\"+kw+\"\\" style=\\"margin-top:10px\\"></div>\";
+                                html += "<canvas class=\"b2sell-comp-flow\" data-key=\""+kw+"\" height=\"100\" style=\"margin-top:20px\"></canvas><div class=\"b2sell-comp-interpret\" data-key=\""+kw+"\" style=\"margin-top:10px\"></div>";
                             }
                             html += \"</div>\";
                         });
