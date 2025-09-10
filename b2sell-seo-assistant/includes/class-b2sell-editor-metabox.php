@@ -25,17 +25,20 @@ class B2Sell_SEO_Editor_Metabox {
     public function render( $post ) {
         $seo_title = get_post_meta( $post->ID, '_b2sell_seo_title', true );
         $seo_desc  = get_post_meta( $post->ID, '_b2sell_seo_description', true );
+        $nonce     = wp_create_nonce( 'b2sell_gpt_nonce' );
         wp_nonce_field( 'b2sell_seo_meta', 'b2sell_seo_meta_nonce' );
 
         ?>
         <p>
             <label for="b2sell_seo_title"><strong>Título SEO</strong></label>
             <input type="text" id="b2sell_seo_title" name="b2sell_seo_title" value="<?php echo esc_attr( $seo_title ); ?>" style="width:100%;" />
+            <button type="button" class="button b2sell-field-gpt" data-field="title">Generar con GPT</button>
             <small><span id="b2sell_title_count">0</span> caracteres</small>
         </p>
         <p>
             <label for="b2sell_seo_description"><strong>Meta description</strong></label>
             <textarea id="b2sell_seo_description" name="b2sell_seo_description" rows="3" style="width:100%;"><?php echo esc_textarea( $seo_desc ); ?></textarea>
+            <button type="button" class="button b2sell-field-gpt" data-field="meta">Generar con GPT</button>
             <small><span id="b2sell_desc_count">0</span> caracteres</small>
         </p>
         <div class="b2sell-snippet-preview">
@@ -58,12 +61,61 @@ class B2Sell_SEO_Editor_Metabox {
             $('.b2sell-snippet-tab').on('click',function(){var v=$(this).data('view');$('.b2sell-snippet-tab').removeClass('active');$(this).addClass('active');$('.b2sell-snippet-view').hide();$('.b2sell-snippet-'+v).show();});
         });
         </script>
+        <div id="b2sell-field-gpt-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:100000;">
+            <div class="b2sell-gpt-inner" style="background:#fff;padding:20px;max-width:600px;width:90%;max-height:80%;overflow:auto;">
+                <div class="b2sell-gpt-brand-header" style="text-align:center;font-weight:bold;color:#5450FF;margin-bottom:10px;">B2SELL</div>
+                <h2>Sugerencia GPT</h2>
+                <textarea id="b2sell-field-gpt-text" style="width:100%;height:80px;"></textarea>
+                <div class="b2sell-snippet-preview">
+                    <div class="b2sell-snippet-tabs"><button type="button" class="b2sell-snippet-tab active" data-view="desktop">Vista Desktop</button><button type="button" class="b2sell-snippet-tab" data-view="mobile">Vista Móvil</button></div>
+                    <div class="b2sell-snippet-desktop b2sell-snippet-view"><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-url"><?php echo esc_html( home_url() ); ?></span><span class="b2sell-snippet-desc"></span></div>
+                    <div class="b2sell-snippet-mobile b2sell-snippet-view" style="display:none;"><span class="b2sell-snippet-url"><?php echo esc_html( home_url() ); ?></span><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-desc"></span></div>
+                </div>
+                <p><button class="button button-primary" id="b2sell-field-gpt-apply">Usar</button> <button class="button" id="b2sell-field-gpt-close">Cerrar</button></p>
+                <div class="b2sell-gpt-brand-footer" style="text-align:center;font-size:12px;color:#5450FF;margin-top:10px;">B2SELL</div>
+            </div>
+        </div>
+        <script>
+        jQuery(function($){
+            const gptNonce='<?php echo esc_js( $nonce ); ?>';
+            let currentField='';
+            function updateModalSnippet(){
+                const t=currentField==='title'?$('#b2sell-field-gpt-text').val():$('#b2sell_seo_title').val();
+                const m=currentField==='meta'?$('#b2sell-field-gpt-text').val():$('#b2sell_seo_description').val();
+                $('#b2sell-field-gpt-modal .b2sell-snippet-title').text(t);
+                $('#b2sell-field-gpt-modal .b2sell-snippet-desc').text(m);
+                $('#b2sell-field-gpt-modal .b2sell-snippet-url').text('<?php echo esc_js( home_url() ); ?>');
+            }
+            $('.b2sell-field-gpt').on('click',function(){
+                currentField=$(this).data('field');
+                $('#b2sell-field-gpt-modal').css('display','flex');
+                $('#b2sell-field-gpt-text').val('Generando...');
+                const postID=<?php echo intval( $post->ID ); ?>;
+                $.post(ajaxurl,{action:'b2sell_gpt_generate',gpt_action:currentField,post_id:postID,_wpnonce:gptNonce},function(res){
+                    if(res.success){
+                        $('#b2sell-field-gpt-text').val(res.data.content);
+                        updateModalSnippet();
+                    }else{
+                        $('#b2sell-field-gpt-text').val(res.data.message||res.data);
+                    }
+                });
+            });
+            $('#b2sell-field-gpt-close').on('click',function(){$('#b2sell-field-gpt-modal').hide();});
+            $('#b2sell-field-gpt-apply').on('click',function(){
+                const val=$('#b2sell-field-gpt-text').val();
+                if(currentField==='title'){$('#b2sell_seo_title').val(val).trigger('input');}
+                if(currentField==='meta'){$('#b2sell_seo_description').val(val).trigger('input');}
+                $('#b2sell-field-gpt-modal').hide();
+            });
+            $('#b2sell-field-gpt-text').on('input',updateModalSnippet);
+            $('#b2sell-field-gpt-modal').on('click','.b2sell-snippet-tab',function(){var v=$(this).data('view');$('#b2sell-field-gpt-modal .b2sell-snippet-tab').removeClass('active');$(this).addClass('active');$('#b2sell-field-gpt-modal .b2sell-snippet-view').hide();$('#b2sell-field-gpt-modal .b2sell-snippet-'+v).show();});
+        });
+        </script>
         <?php
         $history = get_post_meta( $post->ID, '_b2sell_seo_history', true );
         $latest  = is_array( $history ) ? end( $history ) : false;
         $score   = $latest ? intval( $latest['score'] ) : 'N/A';
         $recs    = $latest && ! empty( $latest['recommendations'] ) ? $latest['recommendations'] : array();
-        $nonce   = wp_create_nonce( 'b2sell_gpt_nonce' );
         ?>
         <div class="b2sell-seo-box">
             <p><strong>Puntaje SEO:</strong> <?php echo esc_html( $score ); ?>/100</p>
