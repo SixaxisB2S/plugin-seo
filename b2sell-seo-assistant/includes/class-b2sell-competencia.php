@@ -268,7 +268,7 @@ class B2Sell_Competencia {
                             var dataKw = res.data[kw] || {};
                             var list = dataKw.items || [];
                             var volume = dataKw.volume || 0;
-                            var volTxt = volume ? volume : \'N/A\';
+                            var volTxt = volume ? volume : "N/A";
                             b2sellCompResults[kw] = list;
                             var flow = dataKw.traffic_flow || null;
                             if(flow){ b2sellCompFlows[kw] = flow; }
@@ -276,7 +276,7 @@ class B2Sell_Competencia {
                             if(list.length){
                                 html += "<table class=\\"widefat\\"><thead><tr><th>Competidor</th><th>Descripción</th><th>URL</th><th>Volumen de búsqueda</th><th>Tráfico estimado</th></tr></thead><tbody>";
                                 list.forEach(function(r){
-                                    var trafTxt = volume ? r.traffic : \'N/A\';
+                                    var trafTxt = volume ? r.traffic : "N/A";
                                     html += "<tr><td>"+r.title+"</td><td>"+r.snippet+"</td><td><a href=\\""+r.link+"\\" target=\\"_blank\\">"+r.link+"</a></td><td>"+volTxt+"</td><td>"+trafTxt+"</td></tr>";
                                 });
                                 html += "</tbody></table>";
