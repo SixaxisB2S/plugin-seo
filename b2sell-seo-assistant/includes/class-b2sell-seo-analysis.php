@@ -103,6 +103,29 @@ class B2Sell_SEO_Analysis {
         echo '</tbody></table>';
         echo '<div id="b2sell-history" style="display:none;margin-top:20px;"><canvas id="b2sell-history-chart" height="100"></canvas></div>';
 
+        echo '<h2 style="margin-top:40px;">Metadatos SEO</h2>';
+        echo '<table class="widefat" id="b2sell-meta-table"><thead><tr><th>Título</th><th>Título SEO</th><th>Meta description</th><th></th></tr></thead><tbody>';
+        foreach ( $posts as $p ) {
+            $t = get_post_meta( $p->ID, '_b2sell_seo_title', true );
+            $d = get_post_meta( $p->ID, '_b2sell_seo_description', true );
+            echo '<tr data-id="' . esc_attr( $p->ID ) . '"><td>' . esc_html( $p->post_title ) . '</td><td class="b2sell-meta-title">' . esc_html( $t ) . '</td><td class="b2sell-meta-desc">' . esc_html( $d ) . '</td><td><button class="button b2sell-meta-edit">Editar</button></td></tr>';
+        }
+        echo '</tbody></table>';
+
+        echo '<div id="b2sell-meta-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:100000;">';
+        echo '<div style="background:#fff;padding:20px;max-width:600px;width:90%;max-height:90%;overflow:auto;">';
+        echo '<h2>Editar metadatos</h2>';
+        echo '<p><label>Título SEO<br /><input type="text" id="b2sell-meta-modal-title" style="width:100%;" /></label><br /><small><span id="b2sell-modal-title-count">0</span> caracteres</small></p>';
+        echo '<p><label>Meta description<br /><textarea id="b2sell-meta-modal-desc" style="width:100%;" rows="3"></textarea></label><br /><small><span id="b2sell-modal-desc-count">0</span> caracteres</small></p>';
+        echo '<div class="b2sell-snippet-preview"><div class="b2sell-snippet-tabs"><button type="button" class="b2sell-snippet-tab active" data-view="desktop">Vista Desktop</button><button type="button" class="b2sell-snippet-tab" data-view="mobile">Vista Móvil</button></div><div class="b2sell-snippet-desktop b2sell-snippet-view"><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-url">' . esc_html( home_url() ) . '</span><span class="b2sell-snippet-desc"></span></div><div class="b2sell-snippet-mobile b2sell-snippet-view" style="display:none;"><span class="b2sell-snippet-url">' . esc_html( home_url() ) . '</span><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-desc"></span></div></div>';
+        echo '<p><button class="button button-primary" id="b2sell-meta-save">Guardar</button> <button class="button" id="b2sell-meta-cancel">Cancelar</button></p>';
+        echo '</div></div>';
+
+        $nonce = wp_create_nonce( 'b2sell_seo_meta' );
+        echo '<script>var b2sellSeoNonce="' . esc_js( $nonce ) . '";</script>';
+        echo '<style>.b2sell-snippet-preview{margin-top:20px;font-family:Arial,sans-serif}.b2sell-snippet-tabs{margin-bottom:10px}.b2sell-snippet-tabs button{margin-right:5px}.b2sell-snippet-view{border:1px solid #ccc;padding:10px}.b2sell-snippet-desktop{max-width:600px}.b2sell-snippet-mobile{max-width:360px}.b2sell-snippet-title{color:#5450FF;font-size:18px;margin-bottom:2px;display:block}.b2sell-snippet-url{color:green;font-size:14px;margin-bottom:2px;display:block}.b2sell-snippet-desc{color:#5f6368;font-size:13px;line-height:1.4}.b2sell-snippet-desktop .b2sell-snippet-desc{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.b2sell-snippet-tab.active{font-weight:bold}</style>';
+        echo '<script>jQuery(function($){var currentId=0;function updateModal(){var t=$("#b2sell-meta-modal-title").val();var d=$("#b2sell-meta-modal-desc").val();$("#b2sell-modal-title-count").text(t.length);$("#b2sell-modal-desc-count").text(d.length);$("#b2sell-meta-modal .b2sell-snippet-title").text(t);$("#b2sell-meta-modal .b2sell-snippet-desc").text(d);}$("#b2sell-meta-table").on("click",".b2sell-meta-edit",function(){var row=$(this).closest("tr");currentId=row.data("id");$("#b2sell-meta-modal-title").val(row.find(".b2sell-meta-title").text());$("#b2sell-meta-modal-desc").val(row.find(".b2sell-meta-desc").text());$("#b2sell-meta-modal").css("display","flex");updateModal();});$("#b2sell-meta-cancel").on("click",function(){$("#b2sell-meta-modal").hide();});$("#b2sell-meta-modal-title,#b2sell-meta-modal-desc").on("input",updateModal);$("#b2sell-meta-save").on("click",function(){$.post(ajaxurl,{action:"b2sell_save_seo_meta",post_id:currentId,title:$("#b2sell-meta-modal-title").val(),description:$("#b2sell-meta-modal-desc").val(),nonce:b2sellSeoNonce},function(res){alert(res.success?"Guardado":"Error");if(res.success){var row=$("#b2sell-meta-table tr[data-id=\'"+currentId+"\']");row.find(".b2sell-meta-title").text($("#b2sell-meta-modal-title").val());row.find(".b2sell-meta-desc").text($("#b2sell-meta-modal-desc").val());}$("#b2sell-meta-modal").hide();});});$(".b2sell-snippet-tab").on("click",function(){var v=$(this).data("view");$(".b2sell-snippet-tab").removeClass("active");$(this).addClass("active");$(".b2sell-snippet-view").hide();$(".b2sell-snippet-"+v).show();});});</script>';
+
         $logo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAAA8CAIAAACsOWLGAAAACXBIWXMAAA7EAAAOxAGVKw4bAAABSElEQVR4nO3b0WqDMBiG4Wbs/m/ZHQghSzTWdh8r+jxnbRQKfdG/KZZlWR7w177++wNwTcIiQlhECIsIYREhLCKERYSwiBAWEcIiQlhECIsIYREhLCKERYSwiBAWEcIiQlhECIsIYREhLCK+58ullO6d7nGx9oB2ae/E8f1uafNxtMkSn+kgrFX9RksppZT25aPJoi6NHXQnSuTyzt0K2266eiYXpHVVTLfy1BWramMSChNPhbU3SI3H1ObWe197wN4EJtBLemvGqsahapzxzVi38vqMVfnJxujdfSxVselcWF1Ge1WNAxZ3szEw/Vre3yCd7CxMTjzcID27xGc6CAte479CIoRFhLCIEBYRwiJCWEQIiwhhESEsIoRFhLCIEBYRwiJCWEQIiwhhESEsIoRFhLCIEBYRwiJCWEQIiwhhESEsIoRFxA9KdYd0WrGpfwAAAABJRU5ErkJggg==';
         echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
         echo '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>';

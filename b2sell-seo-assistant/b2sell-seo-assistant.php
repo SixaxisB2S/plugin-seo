@@ -14,6 +14,7 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-gpt.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-sem.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-editor-metabox.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-competencia.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/class-b2sell-seo-meta.php';
 
 register_activation_hook( __FILE__, array( 'B2Sell_Competencia', 'install' ) );
 
