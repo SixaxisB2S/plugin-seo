@@ -88,6 +88,12 @@ class B2Sell_GPT_Generator {
         $action    = sanitize_text_field( $_POST['gpt_action'] ?? '' );
         $keyword   = sanitize_text_field( $_POST['keyword'] ?? '' );
         $paragraph = sanitize_textarea_field( $_POST['paragraph'] ?? '' );
+        $post_id   = intval( $_POST['post_id'] ?? 0 );
+        if ( ! $keyword && $post_id ) {
+            $post    = get_post( $post_id );
+            $keyword = $post ? wp_strip_all_tags( $post->post_content ) : '';
+        }
+        $keyword = mb_substr( $keyword, 0, 800 );
         $api_key   = get_option( 'b2sell_openai_api_key', '' );
         if ( ! $api_key ) {
             wp_send_json_error( array( 'message' => 'API Key no configurada' ) );
@@ -97,7 +103,7 @@ class B2Sell_GPT_Generator {
                 $prompt = 'Genera un título atractivo y optimizado para SEO sobre: ' . $keyword;
                 break;
             case 'meta':
-                $prompt = 'Escribe una meta descripción optimizada para SEO (máximo 155 caracteres) sobre: ' . $keyword;
+                $prompt = 'Escribe una meta descripción optimizada para SEO (máximo 160 caracteres) sobre: ' . $keyword;
                 break;
             case 'rewrite':
                 $prompt = 'Reescribe el siguiente párrafo mejorando el SEO y usando mejores palabras clave:\n\n' . $paragraph;
@@ -141,6 +147,11 @@ class B2Sell_GPT_Generator {
             wp_send_json_error( array( 'message' => 'Respuesta inválida de OpenAI' ) );
         }
         $content = trim( $data['choices'][0]['message']['content'] );
+        if ( 'title' === $action ) {
+            $content = mb_substr( $content, 0, 60 );
+        } elseif ( 'meta' === $action ) {
+            $content = mb_substr( $content, 0, 160 );
+        }
         wp_send_json_success( array( 'content' => $content ) );
     }
 
