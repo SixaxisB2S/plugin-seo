@@ -312,48 +312,75 @@ class B2Sell_Competencia {
                 $comp_ranks[ $c ] = 0;
             }
             $found = 0;
-            for ( $page = 0; $page < 5 && $found < ( count( $comp_ranks ) + 1 ); $page++ ) {
-                if ( 'serpapi' === $provider ) {
-                    $url = add_query_arg( array(
-                        'engine' => 'google',
-                        'api_key'=> $serpapi,
-                        'q'      => $keyword,
-                        'num'    => 10,
-                        'start'  => $page * 10,
-                        'hl'     => $hl,
-                        'gl'     => $gl,
-                    ), 'https://serpapi.com/search.json' );
+            if ( 'serpapi' === $provider ) {
+                for ( $start = 0; $start <= 80 && $found < ( count( $comp_ranks ) + 1 ); $start += 20 ) {
+                    $url = add_query_arg(
+                        array(
+                            'engine'  => 'google',
+                            'api_key' => $serpapi,
+                            'q'       => $keyword,
+                            'num'     => 20,
+                            'start'   => $start,
+                            'hl'      => $hl,
+                            'gl'      => $gl,
+                        ),
+                        'https://serpapi.com/search.json'
+                    );
                     $response = wp_remote_get( $url );
-                    if ( is_wp_error( $response ) ) { continue; }
+                    if ( is_wp_error( $response ) ) {
+                        continue;
+                    }
                     $data  = json_decode( wp_remote_retrieve_body( $response ), true );
                     $items = $data['organic_results'] ?? array();
-                } else {
-                    $url = add_query_arg( array(
-                        'key'   => $api_key,
-                        'cx'    => $cx,
-                        'q'     => $keyword,
-                        'num'   => 10,
-                        'start' => $page * 10 + 1,
-                        'gl'    => $gl,
-                        'hl'    => $hl,
-                    ), 'https://www.googleapis.com/customsearch/v1' );
+                    foreach ( $items as $index => $item ) {
+                        $link        = $item['link'] ?? '';
+                        $item_domain = parse_url( $link, PHP_URL_HOST );
+                        $rank        = $start + $index + 1;
+                        if ( ! $my_rank && $item_domain === $domain ) {
+                            $my_rank = $rank;
+                            $found++;
+                        }
+                        foreach ( $comp_ranks as $cd => $r ) {
+                            if ( ! $r && $item_domain === $cd ) {
+                                $comp_ranks[ $cd ] = $rank;
+                                $found++;
+                            }
+                        }
+                    }
+                }
+            } else {
+                for ( $page = 0; $page < 5 && $found < ( count( $comp_ranks ) + 1 ); $page++ ) {
+                    $url = add_query_arg(
+                        array(
+                            'key'   => $api_key,
+                            'cx'    => $cx,
+                            'q'     => $keyword,
+                            'num'   => 10,
+                            'start' => $page * 10 + 1,
+                            'gl'    => $gl,
+                            'hl'    => $hl,
+                        ),
+                        'https://www.googleapis.com/customsearch/v1'
+                    );
                     $response = wp_remote_get( $url );
-                    if ( is_wp_error( $response ) ) { continue; }
+                    if ( is_wp_error( $response ) ) {
+                        continue;
+                    }
                     $data  = json_decode( wp_remote_retrieve_body( $response ), true );
                     $items = $data['items'] ?? array();
-                }
-                foreach ( $items as $index => $item ) {
-                    $link        = $item['link'] ?? '';
-                    $item_domain = parse_url( $link, PHP_URL_HOST );
-                    $rank        = $page * 10 + $index + 1;
-                    if ( ! $my_rank && $item_domain === $domain ) {
-                        $my_rank = $rank;
-                        $found++;
-                    }
-                    foreach ( $comp_ranks as $cd => $r ) {
-                        if ( ! $r && $item_domain === $cd ) {
-                            $comp_ranks[ $cd ] = $rank;
+                    foreach ( $items as $index => $item ) {
+                        $link        = $item['link'] ?? '';
+                        $item_domain = parse_url( $link, PHP_URL_HOST );
+                        $rank        = $page * 10 + $index + 1;
+                        if ( ! $my_rank && $item_domain === $domain ) {
+                            $my_rank = $rank;
                             $found++;
+                        }
+                        foreach ( $comp_ranks as $cd => $r ) {
+                            if ( ! $r && $item_domain === $cd ) {
+                                $comp_ranks[ $cd ] = $rank;
+                                $found++;
+                            }
                         }
                     }
                 }
