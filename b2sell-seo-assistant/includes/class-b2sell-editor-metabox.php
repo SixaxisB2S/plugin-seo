@@ -6,6 +6,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class B2Sell_SEO_Editor_Metabox {
     public function __construct() {
         add_action( 'add_meta_boxes', array( $this, 'register' ) );
+        add_action( 'save_post', array( $this, 'save' ) );
     }
 
     public function register() {
@@ -15,13 +16,49 @@ class B2Sell_SEO_Editor_Metabox {
                 'B2SELL SEO',
                 array( $this, 'render' ),
                 $type,
-                'side',
+                'normal',
                 'high'
             );
         }
     }
 
     public function render( $post ) {
+        $seo_title = get_post_meta( $post->ID, '_b2sell_seo_title', true );
+        $seo_desc  = get_post_meta( $post->ID, '_b2sell_seo_description', true );
+        wp_nonce_field( 'b2sell_seo_meta', 'b2sell_seo_meta_nonce' );
+
+        ?>
+        <p>
+            <label for="b2sell_seo_title"><strong>Título SEO</strong></label>
+            <input type="text" id="b2sell_seo_title" name="b2sell_seo_title" value="<?php echo esc_attr( $seo_title ); ?>" style="width:100%;" />
+            <small><span id="b2sell_title_count">0</span> caracteres</small>
+        </p>
+        <p>
+            <label for="b2sell_seo_description"><strong>Meta description</strong></label>
+            <textarea id="b2sell_seo_description" name="b2sell_seo_description" rows="3" style="width:100%;"><?php echo esc_textarea( $seo_desc ); ?></textarea>
+            <small><span id="b2sell_desc_count">0</span> caracteres</small>
+        </p>
+        <div class="b2sell-snippet-preview">
+            <div class="b2sell-snippet-tabs"><button type="button" class="b2sell-snippet-tab active" data-view="desktop">Vista Desktop</button><button type="button" class="b2sell-snippet-tab" data-view="mobile">Vista Móvil</button></div>
+            <div class="b2sell-snippet-desktop b2sell-snippet-view"><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-url"><?php echo esc_html( home_url() ); ?></span><span class="b2sell-snippet-desc"></span></div>
+            <div class="b2sell-snippet-mobile b2sell-snippet-view" style="display:none;"><span class="b2sell-snippet-url"><?php echo esc_html( home_url() ); ?></span><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-desc"></span></div>
+        </div>
+        <script>
+        jQuery(function($){
+            function updateSeoFields(){
+                var t=$('#b2sell_seo_title').val();
+                var d=$('#b2sell_seo_description').val();
+                $('#b2sell_title_count').text(t.length);
+                $('#b2sell_desc_count').text(d.length);
+                $('.b2sell-snippet-title').text(t);
+                $('.b2sell-snippet-desc').text(d);
+            }
+            $('#b2sell_seo_title,#b2sell_seo_description').on('input',updateSeoFields);
+            updateSeoFields();
+            $('.b2sell-snippet-tab').on('click',function(){var v=$(this).data('view');$('.b2sell-snippet-tab').removeClass('active');$(this).addClass('active');$('.b2sell-snippet-view').hide();$('.b2sell-snippet-'+v).show();});
+        });
+        </script>
+        <?php
         $history = get_post_meta( $post->ID, '_b2sell_seo_history', true );
         $latest  = is_array( $history ) ? end( $history ) : false;
         $score   = $latest ? intval( $latest['score'] ) : 'N/A';
@@ -152,6 +189,21 @@ class B2Sell_SEO_Editor_Metabox {
         });
         </script>
         <?php
+    }
+
+    public function save( $post_id ) {
+        if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+            return;
+        }
+        if ( ! isset( $_POST['b2sell_seo_meta_nonce'] ) || ! wp_verify_nonce( $_POST['b2sell_seo_meta_nonce'], 'b2sell_seo_meta' ) ) {
+            return;
+        }
+        if ( isset( $_POST['b2sell_seo_title'] ) ) {
+            update_post_meta( $post_id, '_b2sell_seo_title', sanitize_text_field( wp_unslash( $_POST['b2sell_seo_title'] ) ) );
+        }
+        if ( isset( $_POST['b2sell_seo_description'] ) ) {
+            update_post_meta( $post_id, '_b2sell_seo_description', sanitize_textarea_field( wp_unslash( $_POST['b2sell_seo_description'] ) ) );
+        }
     }
 }
 
