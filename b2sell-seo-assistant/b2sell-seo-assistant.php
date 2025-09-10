@@ -120,13 +120,14 @@ class B2Sell_SEO_Assistant {
             $cache = get_option( 'b2sell_seo_dashboard_cache', array() );
         }
 
-        $history      = $this->analysis->get_dashboard_history();
-        $onpage_avg   = $cache['onpage_avg'] ?? 0;
-        $technical    = $cache['technical'] ?? array( 'metrics' => array(), 'score' => 0 );
-        $images       = $cache['images'] ?? array( 'total' => 0, 'missing_alt' => 0, 'oversized' => 0 );
-        $global_score = $cache['global_score'] ?? 0;
-        $score_color  = $cache['score_color'] ?? 'red';
-        $recs         = $cache['recommendations'] ?? array();
+        $history       = $this->analysis->get_dashboard_history();
+        $comp_history  = $this->competencia->get_dashboard_history();
+        $onpage_avg    = $cache['onpage_avg'] ?? 0;
+        $technical     = $cache['technical'] ?? array( 'metrics' => array(), 'score' => 0 );
+        $images        = $cache['images'] ?? array( 'total' => 0, 'missing_alt' => 0, 'oversized' => 0 );
+        $global_score  = $cache['global_score'] ?? 0;
+        $score_color   = $cache['score_color'] ?? 'red';
+        $recs          = $cache['recommendations'] ?? array();
 
         echo '<div class="wrap b2sell-dashboard">';
         echo '<h1>Dashboard SEO</h1>';
@@ -179,7 +180,17 @@ class B2Sell_SEO_Assistant {
 
         if ( $history ) {
             echo '<h2>Histórico de análisis</h2>';
-            echo '<canvas id="b2sell-history-chart" height="100"></canvas>';
+            echo '<div class="b2sell-history-charts">';
+            echo '<div><canvas id="b2sell-history-chart" height="100"></canvas></div>';
+            echo '<div>';
+            if ( $comp_history ) {
+                echo '<label style="display:block;margin-bottom:4px;">Keyword: <select id="b2sell-comp-keyword"></select></label>';
+                echo '<canvas id="b2sell-comp-chart" height="100"></canvas>';
+            } else {
+                echo '<p>Sin datos de competencia.</p>';
+            }
+            echo '</div>';
+            echo '</div>';
             echo '<table class="widefat" style="margin-top:20px"><thead><tr><th>Fecha</th><th>Puntaje Global</th><th>On-page</th><th>Técnico</th><th>Imágenes</th></tr></thead><tbody>';
             foreach ( array_reverse( $history ) as $h ) {
                 echo '<tr><td>' . esc_html( $h['date'] ) . '</td><td>' . esc_html( $h['global_score'] ) . '</td><td>' . esc_html( $h['onpage'] ) . '</td><td>' . esc_html( $h['technical'] ) . '</td><td>' . esc_html( $h['images'] ) . '</td></tr>';
@@ -194,9 +205,10 @@ class B2Sell_SEO_Assistant {
         $chart_data = array_slice( $history, -10 );
         $labels     = wp_json_encode( wp_list_pluck( $chart_data, 'date' ) );
         $scores     = wp_json_encode( array_map( 'intval', wp_list_pluck( $chart_data, 'global_score' ) ) );
+        $comp_json  = wp_json_encode( $comp_history );
 
         echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
-        echo '<script>jQuery(function($){$.post(ajaxurl,{action:"b2sell_refresh_pagespeed"},function(res){if(res.success){var r=$("#b2sell-ps-row");r.removeClass("b2sell-red b2sell-yellow b2sell-green").addClass("b2sell-"+res.data.color);r.find("td").text(res.data.score);}});});var ctx=document.getElementById("b2sell-history-chart");if(ctx){new Chart(ctx.getContext("2d"),{type:"line",data:{labels:' . $labels . ',datasets:[{label:"Puntaje SEO Global",data:' . $scores . ',borderColor:"#0073aa",fill:false}]},options:{scales:{y:{beginAtZero:true,max:100}}}});}</script>';
+        echo '<script>jQuery(function($){$.post(ajaxurl,{action:"b2sell_refresh_pagespeed"},function(res){if(res.success){var r=$("#b2sell-ps-row");r.removeClass("b2sell-red b2sell-yellow b2sell-green").addClass("b2sell-"+res.data.color);r.find("td").text(res.data.score);}});});var ctx=document.getElementById("b2sell-history-chart");if(ctx){new Chart(ctx.getContext("2d"),{type:"line",data:{labels:' . $labels . ',datasets:[{label:"Puntaje SEO Global",data:' . $scores . ',borderColor:"#0073aa",fill:false}]},options:{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:true}}}});}var b2sellCompData=' . $comp_json . ';var compSelect=document.getElementById("b2sell-comp-keyword");if(compSelect){Object.keys(b2sellCompData).forEach(function(k){var opt=document.createElement("option");opt.value=k;opt.text=k;compSelect.appendChild(opt);});var compCtx=document.getElementById("b2sell-comp-chart").getContext("2d");var colors=["#ff6384","#36a2eb","#ffcd56","#4bc0c0","#9966ff"];function renderComp(kw){var d=b2sellCompData[kw];if(!d)return;var ds=[{label:"Mi sitio",data:d.mine,borderColor:"#0073aa",fill:false}];var i=0;for(var domain in d.competitors){ds.push({label:domain,data:d.competitors[domain],borderColor:colors[i%colors.length],fill:false});i++;}if(window.b2sellCompChart){window.b2sellCompChart.destroy();}window.b2sellCompChart=new Chart(compCtx,{type:"line",data:{labels:d.dates,datasets:ds},options:{scales:{y:{reverse:true,beginAtZero:false,ticks:{stepSize:1}}},plugins:{legend:{display:true}}}});}compSelect.addEventListener("change",function(){renderComp(this.value);});if(compSelect.options.length){renderComp(compSelect.options[0].value);} }</script>';
     }
 
     public function analisis_page() {

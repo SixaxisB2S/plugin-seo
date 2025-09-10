@@ -120,6 +120,54 @@ class B2Sell_Competencia {
         dbDelta( $sql );
     }
 
+    /**
+     * Obtiene histórico de rankings para el dashboard
+     *
+     * @return array
+     */
+    public function get_dashboard_history() {
+        global $wpdb;
+        $rows = $wpdb->get_results( "SELECT keyword,date,my_rank,results FROM {$this->table} ORDER BY keyword,date ASC" );
+        $data = array();
+        foreach ( $rows as $row ) {
+            $keyword = $row->keyword;
+            if ( ! isset( $data[ $keyword ] ) ) {
+                $data[ $keyword ] = array(
+                    'dates'       => array(),
+                    'mine'        => array(),
+                    'competitors' => array(),
+                );
+            }
+            $kdata =& $data[ $keyword ];
+            $kdata['dates'][] = $row->date;
+            $kdata['mine'][]  = (int) $row->my_rank;
+
+            foreach ( $kdata['competitors'] as &$carr ) {
+                $carr[] = null;
+            }
+            unset( $carr );
+
+            $items = json_decode( $row->results, true );
+            if ( $items ) {
+                $items = array_slice( $items, 0, 5 );
+                foreach ( $items as $it ) {
+                    $domain = $it['domain'] ?? '';
+                    if ( ! $domain ) {
+                        continue;
+                    }
+                    if ( ! isset( $kdata['competitors'][ $domain ] ) ) {
+                        if ( count( $kdata['competitors'] ) >= 5 ) {
+                            continue;
+                        }
+                        $kdata['competitors'][ $domain ] = array_fill( 0, count( $kdata['dates'] ), null );
+                    }
+                    $kdata['competitors'][ $domain ][ count( $kdata['dates'] ) - 1 ] = isset( $it['rank'] ) ? (int) $it['rank'] : null;
+                }
+            }
+        }
+        return $data;
+    }
+
     public function render_admin_page() {
         $posts = get_posts( array(
             'post_type'   => array( 'post', 'page' ),
