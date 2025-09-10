@@ -99,12 +99,15 @@ class B2Sell_GPT_Generator {
         if ( ! $api_key ) {
             wp_send_json_error( array( 'message' => 'API Key no configurada' ) );
         }
+        $max_len = 0;
         switch ( $action ) {
             case 'title':
-                $prompt = 'Genera un título atractivo y optimizado para SEO sobre: ' . $keyword;
+                $prompt  = 'Generar un Título SEO con un máximo de 60 caracteres. El texto debe ser natural y no cortarse en la mitad de una palabra. Tema: ' . $keyword;
+                $max_len = 60;
                 break;
             case 'meta':
-                $prompt = 'Escribe una meta descripción optimizada para SEO (máximo 160 caracteres) sobre: ' . $keyword;
+                $prompt  = 'Generar una Meta description con un máximo de 160 caracteres. El texto debe ser natural y no cortarse en la mitad de una palabra. Tema: ' . $keyword;
+                $max_len = 160;
                 break;
             case 'rewrite':
                 $prompt = 'Reescribe el siguiente párrafo mejorando el SEO y usando mejores palabras clave:\n\n' . $paragraph;
@@ -118,41 +121,46 @@ class B2Sell_GPT_Generator {
             default:
                 wp_send_json_error( array( 'message' => 'Acción no válida' ) );
         }
-        $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', array(
-            'headers' => array(
-                'Content-Type'  => 'application/json',
-                'Authorization' => 'Bearer ' . $api_key,
-            ),
-            'body'    => wp_json_encode( array(
-                'model'    => 'gpt-3.5-turbo',
-                'messages' => array(
-                    array( 'role' => 'user', 'content' => $prompt ),
+
+        $attempts = 0;
+        do {
+            $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', array(
+                'headers' => array(
+                    'Content-Type'  => 'application/json',
+                    'Authorization' => 'Bearer ' . $api_key,
                 ),
-            ) ),
-            'timeout' => 30,
-        ) );
-        if ( is_wp_error( $response ) ) {
-            $error_message = $response->get_error_message();
-            if ( false !== stripos( $error_message, 'timed out' ) || false !== stripos( $error_message, 'timeout' ) ) {
-                $msg = 'La solicitud a OpenAI demoró demasiado (timeout). Intenta nuevamente o aumenta los recursos del servidor.';
-            } else {
-                $msg = 'Error de conexión con OpenAI: tu servidor no logra conectarse. Revisa el firewall del hosting y asegúrate de permitir salida HTTPS hacia api.openai.com (puerto 443).';
+                'body'    => wp_json_encode( array(
+                    'model'    => 'gpt-3.5-turbo',
+                    'messages' => array(
+                        array( 'role' => 'user', 'content' => $prompt ),
+                    ),
+                ) ),
+                'timeout' => 30,
+            ) );
+            if ( is_wp_error( $response ) ) {
+                $error_message = $response->get_error_message();
+                if ( false !== stripos( $error_message, 'timed out' ) || false !== stripos( $error_message, 'timeout' ) ) {
+                    $msg = 'La solicitud a OpenAI demoró demasiado (timeout). Intenta nuevamente o aumenta los recursos del servidor.';
+                } else {
+                    $msg = 'Error de conexión con OpenAI: tu servidor no logra conectarse. Revisa el firewall del hosting y asegúrate de permitir salida HTTPS hacia api.openai.com (puerto 443).';
+                }
+                wp_send_json_error( array( 'message' => $msg ) );
             }
-            wp_send_json_error( array( 'message' => $msg ) );
+            $data = json_decode( wp_remote_retrieve_body( $response ), true );
+            if ( isset( $data['error']['message'] ) ) {
+                wp_send_json_error( array( 'message' => $data['error']['message'] ) );
+            }
+            if ( ! isset( $data['choices'][0]['message']['content'] ) ) {
+                wp_send_json_error( array( 'message' => 'Respuesta inválida de OpenAI' ) );
+            }
+            $content = trim( $data['choices'][0]['message']['content'] );
+            $attempts++;
+        } while ( $max_len && mb_strlen( $content ) > $max_len && $attempts < 5 );
+
+        if ( $max_len && mb_strlen( $content ) > $max_len ) {
+            wp_send_json_error( array( 'message' => 'No se pudo generar un texto dentro del límite de caracteres' ) );
         }
-        $data = json_decode( wp_remote_retrieve_body( $response ), true );
-        if ( isset( $data['error']['message'] ) ) {
-            wp_send_json_error( array( 'message' => $data['error']['message'] ) );
-        }
-        if ( ! isset( $data['choices'][0]['message']['content'] ) ) {
-            wp_send_json_error( array( 'message' => 'Respuesta inválida de OpenAI' ) );
-        }
-        $content = trim( $data['choices'][0]['message']['content'] );
-        if ( 'title' === $action ) {
-            $content = mb_substr( $content, 0, 60 );
-        } elseif ( 'meta' === $action ) {
-            $content = mb_substr( $content, 0, 160 );
-        }
+
         wp_send_json_success( array( 'content' => $content ) );
     }
 
@@ -172,55 +180,66 @@ class B2Sell_GPT_Generator {
         if ( ! $api_key ) {
             wp_send_json_error( array( 'message' => 'API Key no configurada' ) );
         }
-        $prompt = 'Basado en el siguiente contenido genera un título SEO (máximo 60 caracteres) y una meta description (máximo 160 caracteres). Devuelve un JSON con las claves "title" y "description":\n\n' . $content;
-        $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', array(
-            'headers' => array(
-                'Content-Type'  => 'application/json',
-                'Authorization' => 'Bearer ' . $api_key,
-            ),
-            'body'    => wp_json_encode( array(
-                'model'    => 'gpt-3.5-turbo',
-                'messages' => array(
-                    array( 'role' => 'user', 'content' => $prompt ),
+        $prompt = 'Basado en el siguiente contenido genera un título SEO con un máximo de 60 caracteres y una meta description con un máximo de 160 caracteres. El texto debe ser natural y no cortarse en la mitad de una palabra. Devuelve un JSON con las claves "title" y "description":\n\n' . $content;
+
+        $attempts = 0;
+        do {
+            $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', array(
+                'headers' => array(
+                    'Content-Type'  => 'application/json',
+                    'Authorization' => 'Bearer ' . $api_key,
                 ),
-            ) ),
-            'timeout' => 30,
-        ) );
-        if ( is_wp_error( $response ) ) {
-            $error_message = $response->get_error_message();
-            if ( false !== stripos( $error_message, 'timed out' ) || false !== stripos( $error_message, 'timeout' ) ) {
-                $msg = 'La solicitud a OpenAI demoró demasiado (timeout). Intenta nuevamente o aumenta los recursos del servidor.';
-            } else {
-                $msg = 'Error de conexión con OpenAI: tu servidor no logra conectarse. Revisa el firewall del hosting y asegúrate de permitir salida HTTPS hacia api.openai.com (puerto 443).';
-            }
-            wp_send_json_error( array( 'message' => $msg ) );
-        }
-        $data = json_decode( wp_remote_retrieve_body( $response ), true );
-        if ( isset( $data['error']['message'] ) ) {
-            wp_send_json_error( array( 'message' => $data['error']['message'] ) );
-        }
-        if ( ! isset( $data['choices'][0]['message']['content'] ) ) {
-            wp_send_json_error( array( 'message' => 'Respuesta inválida de OpenAI' ) );
-        }
-        $raw  = trim( $data['choices'][0]['message']['content'] );
-        $json = json_decode( $raw, true );
-        if ( ! is_array( $json ) ) {
-            $json = array();
-            $lines = array_map( 'trim', explode( "\n", $raw ) );
-            foreach ( $lines as $line ) {
-                if ( stripos( $line, 'title' ) === 0 || stripos( $line, 'título' ) === 0 ) {
-                    $json['title'] = trim( substr( $line, strpos( $line, ':' ) + 1 ) );
+                'body'    => wp_json_encode( array(
+                    'model'    => 'gpt-3.5-turbo',
+                    'messages' => array(
+                        array( 'role' => 'user', 'content' => $prompt ),
+                    ),
+                ) ),
+                'timeout' => 30,
+            ) );
+            if ( is_wp_error( $response ) ) {
+                $error_message = $response->get_error_message();
+                if ( false !== stripos( $error_message, 'timed out' ) || false !== stripos( $error_message, 'timeout' ) ) {
+                    $msg = 'La solicitud a OpenAI demoró demasiado (timeout). Intenta nuevamente o aumenta los recursos del servidor.';
+                } else {
+                    $msg = 'Error de conexión con OpenAI: tu servidor no logra conectarse. Revisa el firewall del hosting y asegúrate de permitir salida HTTPS hacia api.openai.com (puerto 443).';
                 }
-                if ( stripos( $line, 'description' ) === 0 || stripos( $line, 'descripción' ) === 0 ) {
-                    $json['description'] = trim( substr( $line, strpos( $line, ':' ) + 1 ) );
+                wp_send_json_error( array( 'message' => $msg ) );
+            }
+            $data = json_decode( wp_remote_retrieve_body( $response ), true );
+            if ( isset( $data['error']['message'] ) ) {
+                wp_send_json_error( array( 'message' => $data['error']['message'] ) );
+            }
+            if ( ! isset( $data['choices'][0]['message']['content'] ) ) {
+                wp_send_json_error( array( 'message' => 'Respuesta inválida de OpenAI' ) );
+            }
+            $raw  = trim( $data['choices'][0]['message']['content'] );
+            $json = json_decode( $raw, true );
+            if ( ! is_array( $json ) ) {
+                $json = array();
+                $lines = array_map( 'trim', explode( "\n", $raw ) );
+                foreach ( $lines as $line ) {
+                    if ( stripos( $line, 'title' ) === 0 || stripos( $line, 'título' ) === 0 ) {
+                        $json['title'] = trim( substr( $line, strpos( $line, ':' ) + 1 ) );
+                    }
+                    if ( stripos( $line, 'description' ) === 0 || stripos( $line, 'descripción' ) === 0 ) {
+                        $json['description'] = trim( substr( $line, strpos( $line, ':' ) + 1 ) );
+                    }
                 }
             }
-        }
-        $title = isset( $json['title'] ) ? mb_substr( $json['title'], 0, 60 ) : '';
-        $desc  = isset( $json['description'] ) ? mb_substr( $json['description'], 0, 160 ) : '';
+            $title = isset( $json['title'] ) ? trim( $json['title'] ) : '';
+            $desc  = isset( $json['description'] ) ? trim( $json['description'] ) : '';
+            $attempts++;
+        } while ( ( mb_strlen( $title ) > 60 || mb_strlen( $desc ) > 160 ) && $attempts < 5 );
+
         if ( '' === $title && '' === $desc ) {
             wp_send_json_error( array( 'message' => 'Respuesta inválida de OpenAI' ) );
         }
+
+        if ( mb_strlen( $title ) > 60 || mb_strlen( $desc ) > 160 ) {
+            wp_send_json_error( array( 'message' => 'No se pudieron generar sugerencias dentro del límite de caracteres' ) );
+        }
+
         wp_send_json_success( array( 'title' => $title, 'description' => $desc ) );
     }
 

@@ -53,7 +53,6 @@ class B2Sell_SEO_Editor_Metabox {
                 if((len>=yellowLowMin&&len<=yellowLowMax)||(len>=yellowHighMin&&len<=yellowHighMax)){return 'yellow';}
                 return 'red';
             }
-            function truncate(text,max){return text.length>max?text.substring(0,max)+'...':text;}
             function updateSeoFields(){
                 var t=$('#b2sell_seo_title').val();
                 var d=$('#b2sell_seo_description').val();
@@ -64,8 +63,8 @@ class B2Sell_SEO_Editor_Metabox {
                 var dStatus=evaluateStatus(dl,120,160,80,119,161,180);
                 $('#b2sell_title_indicator').attr('class','b2sell-seo-indicator '+tStatus);
                 $('#b2sell_desc_indicator').attr('class','b2sell-seo-indicator '+dStatus);
-                $('.b2sell-snippet-title').text(truncate(t,70));
-                $('.b2sell-snippet-desc').text(truncate(d,180));
+                $('.b2sell-snippet-title').text(t);
+                $('.b2sell-snippet-desc').text(d);
             }
             $('#b2sell_seo_title,#b2sell_seo_description').on('input',updateSeoFields);
             updateSeoFields();
@@ -77,6 +76,7 @@ class B2Sell_SEO_Editor_Metabox {
                 <div class="b2sell-gpt-brand-header" style="text-align:center;font-weight:bold;color:#5450FF;margin-bottom:10px;">B2SELL</div>
                 <h2>Sugerencia GPT</h2>
                 <textarea id="b2sell-field-gpt-text" style="width:100%;height:80px;"></textarea>
+                <small><span id="b2sell-field-gpt-count">0</span> caracteres <span id="b2sell-field-gpt-indicator" class="b2sell-seo-indicator"></span></small>
                 <div class="b2sell-snippet-preview">
                     <div class="b2sell-snippet-tabs"><button type="button" class="b2sell-snippet-tab active" data-view="desktop">Vista Desktop</button><button type="button" class="b2sell-snippet-tab" data-view="mobile">Vista Móvil</button></div>
                     <div class="b2sell-snippet-desktop b2sell-snippet-view"><span class="b2sell-snippet-title"></span><span class="b2sell-snippet-url"><?php echo esc_html( home_url() ); ?></span><span class="b2sell-snippet-desc"></span></div>
@@ -90,28 +90,47 @@ class B2Sell_SEO_Editor_Metabox {
         jQuery(function($){
             const gptNonce='<?php echo esc_js( $nonce ); ?>';
             let currentField='';
+            let tries=0;
+            function evaluateStatus(len,greenMin,greenMax,yellowLowMin,yellowLowMax,yellowHighMin,yellowHighMax){
+                if(len>=greenMin&&len<=greenMax){return 'green';}
+                if((len>=yellowLowMin&&len<=yellowLowMax)||(len>=yellowHighMin&&len<=yellowHighMax)){return 'yellow';}
+                return 'red';
+            }
             function updateModalSnippet(){
-                const t=currentField==='title'?$('#b2sell-field-gpt-text').val():$('#b2sell_seo_title').val();
-                const m=currentField==='meta'?$('#b2sell-field-gpt-text').val():$('#b2sell_seo_description').val();
-                const tPreview=t.length>70?t.substring(0,70)+'...':t;
-                const mPreview=m.length>180?m.substring(0,180)+'...':m;
-                $('#b2sell-field-gpt-modal .b2sell-snippet-title').text(tPreview);
-                $('#b2sell-field-gpt-modal .b2sell-snippet-desc').text(mPreview);
+                const val=$('#b2sell-field-gpt-text').val();
+                const len=val.length;
+                $('#b2sell-field-gpt-count').text(len);
+                const status=currentField==='title'?evaluateStatus(len,45,60,30,44,61,70):evaluateStatus(len,120,160,80,119,161,180);
+                $('#b2sell-field-gpt-indicator').attr('class','b2sell-seo-indicator '+status);
+                const t=currentField==='title'?val:$('#b2sell_seo_title').val();
+                const m=currentField==='meta'?val:$('#b2sell_seo_description').val();
+                $('#b2sell-field-gpt-modal .b2sell-snippet-title').text(t);
+                $('#b2sell-field-gpt-modal .b2sell-snippet-desc').text(m);
                 $('#b2sell-field-gpt-modal .b2sell-snippet-url').text('<?php echo esc_js( home_url() ); ?>');
             }
-            $('.b2sell-field-gpt').on('click',function(){
-                currentField=$(this).data('field');
-                $('#b2sell-field-gpt-modal').css('display','flex');
-                $('#b2sell-field-gpt-text').val('Generando...');
-                const postID=<?php echo intval( $post->ID ); ?>;
+            function requestSuggestion(postID){
                 $.post(ajaxurl,{action:'b2sell_gpt_generate',gpt_action:currentField,post_id:postID,_wpnonce:gptNonce},function(res){
                     if(res.success){
+                        const max=currentField==='title'?60:160;
+                        if(res.data.content.length>max&&tries<5){
+                            tries++;
+                            requestSuggestion(postID);
+                            return;
+                        }
                         $('#b2sell-field-gpt-text').val(res.data.content);
                         updateModalSnippet();
                     }else{
                         $('#b2sell-field-gpt-text').val(res.data.message||res.data);
                     }
                 });
+            }
+            $('.b2sell-field-gpt').on('click',function(){
+                currentField=$(this).data('field');
+                $('#b2sell-field-gpt-modal').css('display','flex');
+                $('#b2sell-field-gpt-text').val('Generando...');
+                const postID=<?php echo intval( $post->ID ); ?>;
+                tries=0;
+                requestSuggestion(postID);
             });
             $('#b2sell-field-gpt-close').on('click',function(){$('#b2sell-field-gpt-modal').hide();});
             $('#b2sell-field-gpt-apply').on('click',function(){
@@ -162,7 +181,6 @@ class B2Sell_SEO_Editor_Metabox {
         .b2sell-snippet-title{color:#5450FF;font-size:18px;margin-bottom:2px;display:block}
         .b2sell-snippet-url{color:green;font-size:14px;margin-bottom:2px;display:block}
         .b2sell-snippet-desc{color:#5f6368;font-size:13px;line-height:1.4}
-        .b2sell-snippet-desktop .b2sell-snippet-desc{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
         .b2sell-snippet-tab.active{font-weight:bold}
         .b2sell-seo-indicator{display:inline-block;width:10px;height:10px;border-radius:50%;margin-left:5px;background:red}
         .b2sell-seo-indicator.green{background:#2ecc71}
@@ -172,13 +190,23 @@ class B2Sell_SEO_Editor_Metabox {
         <script>
         jQuery(function($){
             const b2sellSnippetUrl='<?php echo esc_js( home_url() ); ?>';
+            function evaluateStatus(len,greenMin,greenMax,yellowLowMin,yellowLowMax,yellowHighMin,yellowHighMax){
+                if(len>=greenMin&&len<=greenMax){return 'green';}
+                if((len>=yellowLowMin&&len<=yellowLowMax)||(len>=yellowHighMin&&len<=yellowHighMax)){return 'yellow';}
+                return 'red';
+            }
             function updateSnippet(){
                 const t=$('#b2sell-suggest-title').val()||'';
                 const m=$('#b2sell-suggest-meta').val()||'';
-                const tPreview=t.length>70?t.substring(0,70)+'...':t;
-                const mPreview=m.length>180?m.substring(0,180)+'...':m;
-                $('.b2sell-snippet-view .b2sell-snippet-title').text(tPreview);
-                $('.b2sell-snippet-view .b2sell-snippet-desc').text(mPreview);
+                const tl=t.length;const dl=m.length;
+                $('#b2sell-suggest-title-count').text(tl);
+                $('#b2sell-suggest-meta-count').text(dl);
+                const tStatus=evaluateStatus(tl,45,60,30,44,61,70);
+                const dStatus=evaluateStatus(dl,120,160,80,119,161,180);
+                $('#b2sell-suggest-title-indicator').attr('class','b2sell-seo-indicator '+tStatus);
+                $('#b2sell-suggest-meta-indicator').attr('class','b2sell-seo-indicator '+dStatus);
+                $('.b2sell-snippet-view .b2sell-snippet-title').text(t);
+                $('.b2sell-snippet-view .b2sell-snippet-desc').text(m);
                 $('.b2sell-snippet-view .b2sell-snippet-url').text(b2sellSnippetUrl);
             }
             $('#b2sell-gpt-improve').on('click',function(){
@@ -209,10 +237,10 @@ class B2Sell_SEO_Editor_Metabox {
                 ).done(function(titleRes,metaRes,rewriteRes){
                     let html='';
                     if(titleRes[0].success){
-                        html+='<h3>Título optimizado</h3><textarea id="b2sell-suggest-title" class="b2sell-suggest-text" style="width:100%;">'+titleRes[0].data.content+'</textarea><button class="button b2sell-copy" data-target="#b2sell-suggest-title">Copiar</button> <button class="button b2sell-insert" data-action="title" data-target="#b2sell-suggest-title">Insertar</button>';
+                        html+='<h3>Título optimizado</h3><textarea id="b2sell-suggest-title" class="b2sell-suggest-text" style="width:100%;">'+titleRes[0].data.content+'</textarea><small><span id="b2sell-suggest-title-count">0</span> caracteres <span id="b2sell-suggest-title-indicator" class="b2sell-seo-indicator"></span></small><button class="button b2sell-copy" data-target="#b2sell-suggest-title">Copiar</button> <button class="button b2sell-insert" data-action="title" data-target="#b2sell-suggest-title">Insertar</button>';
                     }
                     if(metaRes[0].success){
-                        html+='<h3>Meta description</h3><textarea id="b2sell-suggest-meta" class="b2sell-suggest-text" style="width:100%;">'+metaRes[0].data.content+'</textarea><button class="button b2sell-copy" data-target="#b2sell-suggest-meta">Copiar</button> <button class="button b2sell-insert" data-action="meta" data-target="#b2sell-suggest-meta">Insertar</button>';
+                        html+='<h3>Meta description</h3><textarea id="b2sell-suggest-meta" class="b2sell-suggest-text" style="width:100%;">'+metaRes[0].data.content+'</textarea><small><span id="b2sell-suggest-meta-count">0</span> caracteres <span id="b2sell-suggest-meta-indicator" class="b2sell-seo-indicator"></span></small><button class="button b2sell-copy" data-target="#b2sell-suggest-meta">Copiar</button> <button class="button b2sell-insert" data-action="meta" data-target="#b2sell-suggest-meta">Insertar</button>';
                     }
                     if(rewriteRes[0].success){
                         html+='<h3>Párrafo reescrito</h3><pre>'+rewriteRes[0].data.content+'</pre><button class="button b2sell-copy" data-text="'+rewriteRes[0].data.content.replace(/"/g,'&quot;')+'">Copiar</button> <button class="button b2sell-insert" data-action="rewrite" data-content="'+rewriteRes[0].data.content.replace(/"/g,'&quot;')+'">Insertar</button>';
