@@ -187,7 +187,8 @@ class B2Sell_Competencia {
         echo '<div id="b2sell_comp_hist_modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);">';
         echo '<div style="background:#fff;padding:20px;max-width:800px;margin:50px auto;"><div id="b2sell_comp_hist_modal_content"></div><button class="button" id="b2sell_comp_hist_close">Cerrar</button></div></div>';
 
-        echo '<script>var b2sellCompPosts=' . wp_json_encode( $posts_js ) . ';var b2sellCompNonce="' . esc_js( $nonce ) . '";var b2sellCompResults={};</script>';
+        echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
+        echo '<script>var b2sellCompPosts=' . wp_json_encode( $posts_js ) . ';var b2sellCompNonce="' . esc_js( $nonce ) . '";var b2sellCompResults={};var b2sellCompFlows={};</script>';
         echo '<script>
         jQuery(function($){
             $(".nav-tab-wrapper .nav-tab").on("click",function(e){e.preventDefault();var t=$(this).data("tab");$(".nav-tab").removeClass("nav-tab-active");$(this).addClass("nav-tab-active");$(".b2sell-comp-tab").hide();$("#b2sell_comp_tab_"+t).show();});
@@ -202,7 +203,7 @@ class B2Sell_Competencia {
                 $.post(ajaxurl,{action:"b2sell_competencia_search",keywords:kws,post_id:pid,_wpnonce:b2sellCompNonce},function(res){
                     if(res.success){
                         b2sellCompResults = {};
-                        var my = b2sellCompPosts[pid]||{title:"",meta:"",url:""};
+                        b2sellCompFlows = {};
                         var html = "";
                         kws.forEach(function(kw){
                             var dataKw = res.data[kw] || {};
@@ -210,6 +211,8 @@ class B2Sell_Competencia {
                             var volume = dataKw.volume || 0;
                             var volTxt = volume ? volume : \'N/A\';
                             b2sellCompResults[kw] = list;
+                            var flow = dataKw.traffic_flow || null;
+                            if(flow){ b2sellCompFlows[kw] = flow; }
                             html += "<div class=\"b2sell-comp-block\" data-key=\""+kw+"\"><h2>"+kw+"</h2>";
                             if(list.length){
                                 html += "<table class=\\"widefat\\"><thead><tr><th>Competidor</th><th>Descripción</th><th>URL</th><th>Volumen de búsqueda</th><th>Tráfico estimado</th></tr></thead><tbody>";
@@ -220,11 +223,25 @@ class B2Sell_Competencia {
                                 html += "</tbody></table>";
                                 if(pid){html += "<button class=\\"button b2sell_comp_opt_btn\\" data-keyword=\\""+kw+"\\" style=\\"margin-top:10px;\\">Optimizar con GPT</button>";}
                             }else{
-                                html += "<p>No se encontraron resultados para esta keyword</p>";
+                                html += \"<p>No se encontraron resultados para esta keyword</p>\";
                             }
-                            html += "</div>";
+                            if(flow){
+                                html += \"<canvas class=\\"b2sell-comp-flow\\" data-key=\\"\"+kw+\"\\" height=\\"100\\" style=\\"margin-top:20px\\"></canvas><div class=\\"b2sell-comp-interpret\\" data-key=\\"\"+kw+\"\\" style=\\"margin-top:10px\\"></div>\";
+                            }
+                            html += \"</div>\";
                         });
                         $("#b2sell_comp_results").html(html);
+                        Object.keys(b2sellCompFlows).forEach(function(key){
+                            var flow=b2sellCompFlows[key];
+                            var $canvas=$("canvas.b2sell-comp-flow[data-key=\'"+key+"\']");
+                            if($canvas.length){
+                                var ctx=$canvas[0].getContext("2d");
+                                new Chart(ctx,{type:"bar",data:{labels:["Actual","3","2","1"],datasets:[{label:"Tráfico estimado",data:[flow.current,flow.pos3,flow.pos2,flow.pos1],backgroundColor:["#f44336","#ffeb3b","#ffeb3b","#4caf50"]}]},options:{scales:{y:{beginAtZero:true}}}});
+                                var $div=$(".b2sell-comp-interpret[data-key=\'"+key+"\']");
+                                $.post(ajaxurl,{action:"b2sell_competencia_interpret",rank:flow.current_rank,current:flow.current,pos3:flow.pos3,pos2:flow.pos2,pos1:flow.pos1,keyword:key,_wpnonce:b2sellCompNonce},function(resp){
+                                    if(resp.success){$div.text(resp.data.text);}else{$div.text(resp.data);} });
+                            }
+                        });
                     }else{
                         $("#b2sell_comp_results").html("<div class=\"error\"><p>"+res.data+"</p></div>");
                     }
