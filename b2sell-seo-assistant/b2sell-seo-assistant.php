@@ -285,8 +285,8 @@ class B2Sell_SEO_Assistant {
         echo '<input type="text" id="b2sell_openai_api_key" name="b2sell_openai_api_key" value="' . esc_attr( $openai_key ) . '" style="width:400px;" /></p>';
         echo '<p><label for="b2sell_pagespeed_api_key">Google PageSpeed API Key:</label> ';
         echo '<input type="text" id="b2sell_pagespeed_api_key" name="b2sell_pagespeed_api_key" value="' . esc_attr( $pagespeed_key ) . '" style="width:400px;" /></p>';
-        echo '<h2>Proveedor de datos</h2>';
-        echo '<p><label for="b2sell_comp_provider">Proveedor:</label> <select id="b2sell_comp_provider" name="b2sell_comp_provider"><option value="google"' . selected( $provider, 'google', false ) . '>Google Custom Search</option><option value="serpapi"' . selected( $provider, 'serpapi', false ) . '>SerpAPI</option></select></p>';
+        echo '<h2>Proveedor de Competencia</h2>';
+        echo '<p><label for="b2sell_comp_provider">Proveedor de Competencia:</label> <select id="b2sell_comp_provider" name="b2sell_comp_provider"><option value="google"' . selected( $provider, 'google', false ) . '>Google Custom Search</option><option value="serpapi"' . selected( $provider, 'serpapi', false ) . '>SerpAPI</option></select></p>';
         echo '<h2>Google Custom Search</h2>';
         echo '<p>La <strong>API Key</strong> y el <strong>ID del motor de búsqueda (CX)</strong> son necesarios para realizar la búsqueda de competencia. Obtén estos valores en <a href="https://developers.google.com/custom-search/v1/introduction" target="_blank">Google Custom Search</a>.</p>';
         echo '<p><label for="b2sell_google_api_key">Google Custom Search API Key:</label> ';

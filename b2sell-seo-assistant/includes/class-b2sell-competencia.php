@@ -113,6 +113,7 @@ class B2Sell_Competencia {
             post_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
             results LONGTEXT NOT NULL,
             my_rank INT NOT NULL DEFAULT 0,
+            provider VARCHAR(20) NOT NULL DEFAULT 'google',
             PRIMARY KEY  (id),
             KEY keyword (keyword)
         ) $charset_collate;";
@@ -215,7 +216,7 @@ class B2Sell_Competencia {
         echo '</div>';
 
         echo '<div id="b2sell_comp_tab_history" class="b2sell-comp-tab" style="display:none;">';
-        echo '<table class="widefat"><thead><tr><th>Fecha</th><th>Keyword</th><th>Ranking competidores</th><th>Acciones</th></tr></thead><tbody>';
+        echo '<table class="widefat"><thead><tr><th>Fecha</th><th>Keyword</th><th>Ranking competidores</th><th>Proveedor</th><th>Acciones</th></tr></thead><tbody>';
         if ( $history ) {
             foreach ( $history as $row ) {
                 $results   = json_decode( $row->results, true );
@@ -225,10 +226,11 @@ class B2Sell_Competencia {
                         $rank_html .= $res['rank'] . '. ' . esc_html( $res['title'] ) . '<br>';
                     }
                 }
-                echo '<tr><td>' . esc_html( $row->date ) . '</td><td>' . esc_html( $row->keyword ) . '</td><td>' . $rank_html . '</td><td><button class="button b2sell_comp_detail" data-id="' . esc_attr( $row->id ) . '">Ver detalles</button> <button class="button b2sell_comp_rean" data-id="' . esc_attr( $row->id ) . '">Reanalizar</button></td></tr>';
+                $prov_label = ( 'serpapi' === $row->provider ) ? 'SerpAPI' : 'Google Custom Search';
+                echo '<tr><td>' . esc_html( $row->date ) . '</td><td>' . esc_html( $row->keyword ) . '</td><td>' . $rank_html . '</td><td>' . esc_html( $prov_label ) . '</td><td><button class="button b2sell_comp_detail" data-id="' . esc_attr( $row->id ) . '">Ver detalles</button> <button class="button b2sell_comp_rean" data-id="' . esc_attr( $row->id ) . '">Reanalizar</button></td></tr>';
             }
         } else {
-            echo '<tr><td colspan="4">Sin análisis previos.</td></tr>';
+            echo '<tr><td colspan="5">Sin análisis previos.</td></tr>';
         }
         echo '</tbody></table>';
         echo '</div>';
@@ -341,7 +343,8 @@ class B2Sell_Competencia {
                 $.post(ajaxurl,{action:"b2sell_competencia_history_detail",id:id,_wpnonce:b2sellCompNonce},function(res){
                     if(res.success){
                         var r=res.data.record;
-                        var html="<h2>"+r.keyword+" - "+r.date+"</h2>";
+                        var provLabel = r.provider==="serpapi"?"SerpAPI":"Google Custom Search";
+                        var html="<h2>"+r.keyword+" - "+r.date+" ("+provLabel+")</h2>";
                         html+="<table class=\\"widefat\\"><thead><tr><th>Posición</th><th>Título</th><th>Meta</th><th>URL</th></tr></thead><tbody>";
                         r.results.forEach(function(it){html+="<tr><td>"+it.rank+"</td><td>"+it.title+"</td><td>"+it.snippet+"</td><td><a href=\\""+it.link+"\\" target=\\"_blank\\">"+it.link+"</a></td></tr>";});
                         html+="</tbody></table><canvas id=\\"b2sell_comp_chart\\" height=\\"100\\" style=\\"margin-top:20px\\"></canvas>";
@@ -403,7 +406,7 @@ class B2Sell_Competencia {
                             'hl'     => $hl,
                             'gl'     => $gl,
                         ),
-                        'https://serpapi.com/search'
+                        'https://serpapi.com/search.json'
                     );
                     $response = wp_remote_get( $url );
                     if ( is_wp_error( $response ) ) {
@@ -486,6 +489,7 @@ class B2Sell_Competencia {
                     'post_id'  => $post_id,
                     'results'  => wp_json_encode( $kw_results ),
                     'my_rank'  => $my_rank,
+                    'provider' => $provider,
                 )
             );
         }
@@ -515,6 +519,7 @@ class B2Sell_Competencia {
             'results' => json_decode( $row->results, true ),
             'post_id' => (int) $row->post_id,
             'my_rank' => (int) $row->my_rank,
+            'provider' => $row->provider,
         );
         $history_rows = $wpdb->get_results( $wpdb->prepare( "SELECT date,my_rank,results FROM {$this->table} WHERE keyword=%s ORDER BY date ASC", $row->keyword ) );
         $labels       = array();
@@ -599,7 +604,7 @@ class B2Sell_Competencia {
                         'hl'     => $hl,
                         'gl'     => $gl,
                     ),
-                    'https://serpapi.com/search'
+                    'https://serpapi.com/search.json'
                 );
                 $response = wp_remote_get( $url );
                 if ( is_wp_error( $response ) ) {
@@ -669,6 +674,7 @@ class B2Sell_Competencia {
                 'post_id'  => $post_id,
                 'results'  => wp_json_encode( $kw_results ),
                 'my_rank'  => $my_rank,
+                'provider' => $provider,
             )
         );
         wp_send_json_success();
