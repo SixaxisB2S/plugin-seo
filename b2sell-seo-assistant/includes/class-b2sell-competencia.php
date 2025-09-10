@@ -284,6 +284,10 @@ class B2Sell_Competencia {
         $post_id  = intval( $_POST['post_id'] ?? 0 );
         $api_key  = get_option( 'b2sell_google_api_key', '' );
         $cx       = get_option( 'b2sell_google_cx', '' );
+        $gl       = get_option( 'b2sell_google_gl', 'cl' );
+        $hl       = get_option( 'b2sell_google_hl', 'es' );
+        $gl       = $gl ? $gl : 'cl';
+        $hl       = $hl ? $hl : 'es';
         if ( empty( $keywords ) ) {
             wp_send_json_error( 'Palabras clave vacías' );
         }
@@ -300,6 +304,8 @@ class B2Sell_Competencia {
                     'cx'  => $cx,
                     'q'   => $keyword,
                     'num' => 5,
+                    'gl'  => $gl,
+                    'hl'  => $hl,
                 ),
                 'https://www.googleapis.com/customsearch/v1'
             );
@@ -436,6 +442,10 @@ class B2Sell_Competencia {
         $post_id = (int) $row->post_id;
         $api_key = get_option( 'b2sell_google_api_key', '' );
         $cx      = get_option( 'b2sell_google_cx', '' );
+        $gl      = get_option( 'b2sell_google_gl', 'cl' );
+        $hl      = get_option( 'b2sell_google_hl', 'es' );
+        $gl      = $gl ? $gl : 'cl';
+        $hl      = $hl ? $hl : 'es';
         if ( ! $api_key || ! $cx ) {
             wp_send_json_error( 'API Key o CX no configurados' );
         }
@@ -445,6 +455,8 @@ class B2Sell_Competencia {
                 'cx'  => $cx,
                 'q'   => $keyword,
                 'num' => 5,
+                'gl'  => $gl,
+                'hl'  => $hl,
             ),
             'https://www.googleapis.com/customsearch/v1'
         );
