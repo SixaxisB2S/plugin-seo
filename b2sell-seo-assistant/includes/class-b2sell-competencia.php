@@ -139,9 +139,15 @@ class B2Sell_Competencia {
                 'url'   => get_permalink( $p->ID ),
             );
         }
+        $api_key = get_option( 'b2sell_google_api_key', '' );
+        $cx      = get_option( 'b2sell_google_cx', '' );
         global $wpdb;
         $history = $wpdb->get_results( "SELECT * FROM {$this->table} ORDER BY date DESC LIMIT 20" );
         echo '<div class="wrap">';
+        if ( ! $api_key || ! $cx ) {
+            $link = esc_url( admin_url( 'admin.php?page=b2sell-seo-config' ) );
+            echo '<div class="error"><p>Google Custom Search no está configurado. Configura la API Key y el ID del motor de búsqueda (CX) en la <a href="' . $link . '">página de Configuración</a>.</p></div>';
+        }
         echo '<h1>Competencia</h1>';
         echo '<h2 class="nav-tab-wrapper"><a href="#" class="nav-tab nav-tab-active" data-tab="analysis">Análisis</a><a href="#" class="nav-tab" data-tab="history">Histórico</a></h2>';
 
@@ -320,7 +326,7 @@ class B2Sell_Competencia {
             wp_send_json_error( 'Palabras clave vacías' );
         }
         if ( ! $api_key || ! $cx ) {
-            wp_send_json_error( 'API Key o CX no configurados' );
+            wp_send_json_error( 'API Key o CX no configurados. Configura los valores en la página de Configuración.' );
         }
         $results = array();
         $my_url  = $post_id ? get_permalink( $post_id ) : '';
