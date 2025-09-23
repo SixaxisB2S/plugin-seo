@@ -11,6 +11,8 @@ class B2Sell_GPT_Generator {
         add_action( 'wp_ajax_b2sell_generate_meta', array( $this, 'ajax_generate_meta' ) );
         add_action( 'wp_ajax_b2sell_gpt_generate_blog', array( $this, 'ajax_generate_blog' ) );
         add_action( 'wp_ajax_b2sell_gpt_save_blog', array( $this, 'ajax_save_blog_post' ) );
+        add_action( 'wp_ajax_crear_blog_seo', array( $this, 'ajax_crear_blog_seo' ) );
+        add_action( 'wp_ajax_nopriv_crear_blog_seo', array( $this, 'ajax_crear_blog_seo' ) );
     }
 
     public function render_admin_page() {
@@ -147,7 +149,7 @@ class B2Sell_GPT_Generator {
                     if(res.success){alert('Contenido insertado');}else{alert(res.data && res.data.message ? res.data.message : res.data);}
                 });
             };
-            function b2sellBlogSave(status, content){
+            function b2sellBlogSave(actionType, content){
                 const preview = $('#blog-preview');
                 if(!preview.length){return;}
                 let notice = preview.find('.b2sell-blog-feedback');
@@ -156,13 +158,31 @@ class B2Sell_GPT_Generator {
                     preview.append(notice);
                 }
                 notice.removeClass('b2sell-red b2sell-green').addClass('b2sell-yellow').text('Guardando...');
-                $.post(ajaxurl,{action:'b2sell_gpt_save_blog',status:status,content:content,_wpnonce:b2sellBlogNonce},function(res){
+                const temp=document.createElement('div');
+                temp.innerHTML=content;
+                const h1=temp.querySelector('h1');
+                const title=h1?h1.textContent.trim():'';
+                const payload={
+                    action:'crear_blog_seo',
+                    post_action:actionType,
+                    estado:actionType,
+                    content:content,
+                    title:title,
+                    image_url:$('#b2sell-blog-image-url').val(),
+                    cta_text:$('#b2sell-blog-cta-text').val(),
+                    cta_page:$('#b2sell-blog-cta-page').val(),
+                    _wpnonce:b2sellBlogNonce
+                };
+                $.post(ajaxurl,payload,function(res){
                     if(res.success){
                         let html='<strong>'+res.data.message+'</strong>';
+                        if(res.data.post_id){
+                            html+=' <span>ID: '+res.data.post_id+'</span>';
+                        }
                         if(res.data.edit_link){
                             html+=' <a href="'+res.data.edit_link+'" target="_blank" rel="noopener noreferrer">Editar</a>';
                         }
-                        if(status==='publish' && res.data.view_link){
+                        if(actionType==='publicar' && res.data.view_link){
                             html+=' <a href="'+res.data.view_link+'" target="_blank" rel="noopener noreferrer">Ver</a>';
                         }
                         notice.removeClass('b2sell-yellow b2sell-red').addClass('b2sell-green').html(html);
@@ -206,8 +226,8 @@ class B2Sell_GPT_Generator {
                             }
                         });
                     });
-                    $('#blog-preview').on('click','#b2sell-blog-save-draft',function(){if(!blogContent){return;}b2sellBlogSave('draft',blogContent);});
-                    $('#blog-preview').on('click','#b2sell-blog-publish',function(){if(!blogContent){return;}b2sellBlogSave('publish',blogContent);});
+                    $('#blog-preview').on('click','#b2sell-blog-save-draft',function(){if(!blogContent){return;}b2sellBlogSave('guardar',blogContent);});
+                    $('#blog-preview').on('click','#b2sell-blog-publish',function(){if(!blogContent){return;}b2sellBlogSave('publicar',blogContent);});
                     $('#blog-preview').on('click','#b2sell-blog-download',function(){if(!blogContent){return;}const temp=document.createElement('div');temp.innerHTML=blogContent;const text=temp.textContent||temp.innerText||'';const blob=new Blob([text],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='blog-gpt.txt';document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);});
                 }
             });
@@ -365,6 +385,103 @@ class B2Sell_GPT_Generator {
         $content = wp_kses_post( $result['content'] );
 
         wp_send_json_success( array( 'content' => $content ) );
+    }
+
+    public function ajax_crear_blog_seo() {
+        check_ajax_referer( 'b2sell_gpt_blog' );
+
+        $requested_action = sanitize_key( $_POST['post_action'] ?? '' );
+        if ( ! $requested_action ) {
+            $requested_action = sanitize_key( $_POST['estado'] ?? '' );
+        }
+        if ( ! $requested_action ) {
+            $action_param = sanitize_key( $_POST['action'] ?? '' );
+            if ( in_array( $action_param, array( 'guardar', 'publicar' ), true ) ) {
+                $requested_action = $action_param;
+            }
+        }
+
+        $status = ( 'publicar' === $requested_action ) ? 'publish' : 'draft';
+
+        if ( 'publish' === $status ) {
+            if ( ! current_user_can( 'publish_posts' ) ) {
+                wp_send_json_error( array( 'message' => 'Permisos insuficientes para publicar.' ) );
+            }
+        } elseif ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( array( 'message' => 'Permisos insuficientes.' ) );
+        }
+
+        $raw_content = wp_unslash( $_POST['content'] ?? '' );
+        if ( ! $raw_content ) {
+            wp_send_json_error( array( 'message' => 'El contenido generado no es válido.' ) );
+        }
+
+        $title = sanitize_text_field( wp_unslash( $_POST['title'] ?? '' ) );
+        if ( '' === $title && preg_match( '/<h1[^>]*>(.*?)<\/h1>/is', $raw_content, $matches ) ) {
+            $title = wp_strip_all_tags( $matches[1] );
+        }
+        if ( '' === $title ) {
+            $title = mb_substr( wp_strip_all_tags( $raw_content ), 0, 80 );
+        }
+        if ( '' === $title ) {
+            $title = 'Entrada generada con GPT';
+        }
+
+        $cta_page = intval( $_POST['cta_page'] ?? 0 );
+        $cta_text = sanitize_text_field( wp_unslash( $_POST['cta_text'] ?? '' ) );
+
+        if ( $cta_page ) {
+            $cta_url = get_permalink( $cta_page );
+            if ( $cta_url ) {
+                $cta_label = $cta_text ? $cta_text : get_the_title( $cta_page );
+                $cta_label = $cta_label ? $cta_label : __( 'Ver más', 'b2sell-seo-assistant' );
+                $button     = sprintf(
+                    '<p class="b2sell-blog-cta"><a class="button button-primary b2sell-blog-cta-button" href="%s">%s</a></p>',
+                    esc_url( $cta_url ),
+                    esc_html( $cta_label )
+                );
+                $raw_content .= $button;
+            }
+        }
+
+        $content = wp_kses_post( $raw_content );
+
+        $post_id = wp_insert_post(
+            array(
+                'post_type'    => 'post',
+                'post_status'  => $status,
+                'post_title'   => $title,
+                'post_content' => $content,
+            ),
+            true
+        );
+
+        if ( is_wp_error( $post_id ) ) {
+            wp_send_json_error( array( 'message' => $post_id->get_error_message() ) );
+        }
+
+        $image_url = esc_url_raw( wp_unslash( $_POST['image_url'] ?? '' ) );
+        if ( $image_url ) {
+            require_once ABSPATH . 'wp-admin/includes/media.php';
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            require_once ABSPATH . 'wp-admin/includes/image.php';
+
+            $attachment_id = media_sideload_image( $image_url, $post_id, $title, 'id' );
+            if ( ! is_wp_error( $attachment_id ) ) {
+                set_post_thumbnail( $post_id, $attachment_id );
+            }
+        }
+
+        $message = ( 'publish' === $status ) ? 'Entrada publicada correctamente.' : 'Borrador creado correctamente.';
+
+        $response = array(
+            'message'   => $message,
+            'post_id'   => $post_id,
+            'edit_link' => get_edit_post_link( $post_id, 'raw' ),
+            'view_link' => get_permalink( $post_id ),
+        );
+
+        wp_send_json_success( $response );
     }
 
     public function ajax_save_blog_post() {
