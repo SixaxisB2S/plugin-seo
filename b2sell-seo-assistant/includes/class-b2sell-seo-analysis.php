@@ -5,9 +5,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class B2Sell_SEO_Analysis {
 
+    public function __construct() {
+        add_action( 'wp_ajax_b2sell_generate_product_alt', array( $this, 'ajax_generate_product_alt' ) );
+        add_action( 'wp_ajax_b2sell_generate_product_alt_batch', array( $this, 'ajax_generate_product_alt_batch' ) );
+    }
+
     public function render_admin_page() {
+        $section = isset( $_GET['section'] ) ? sanitize_key( $_GET['section'] ) : 'content';
+        if ( ! in_array( $section, array( 'products', 'content' ), true ) ) {
+            $section = 'content';
+        }
+
         if ( isset( $_GET['post_id'] ) ) {
-            $this->render_analysis( intval( $_GET['post_id'] ) );
+            $this->render_analysis( intval( $_GET['post_id'] ), $section );
         } elseif ( isset( $_GET['technical'] ) ) {
             $this->render_technical();
         } else {
@@ -16,6 +26,37 @@ class B2Sell_SEO_Analysis {
     }
 
     private function render_list() {
+        $section = isset( $_GET['section'] ) ? sanitize_key( $_GET['section'] ) : 'content';
+        if ( ! in_array( $section, array( 'products', 'content' ), true ) ) {
+            $section = 'content';
+        }
+
+        echo '<div class="wrap">';
+        echo '<h1>Análisis SEO</h1>';
+
+        $base_url     = admin_url( 'admin.php?page=b2sell-seo-analisis' );
+        $content_url  = add_query_arg( 'section', 'content', $base_url );
+        $products_url = add_query_arg( 'section', 'products', $base_url );
+
+        echo '<h2 class="nav-tab-wrapper">';
+        echo '<a href="' . esc_url( $content_url ) . '" class="nav-tab' . ( 'products' !== $section ? ' nav-tab-active' : '' ) . '">Contenido</a>';
+        if ( post_type_exists( 'product' ) ) {
+            echo '<a href="' . esc_url( $products_url ) . '" class="nav-tab' . ( 'products' === $section ? ' nav-tab-active' : '' ) . '">Productos</a>';
+        }
+        echo '</h2>';
+
+        if ( 'products' === $section ) {
+            $this->render_products_tab();
+        } else {
+            $low_score = isset( $_GET['low_score'] );
+            $order     = isset( $_GET['order'] ) ? sanitize_text_field( $_GET['order'] ) : '';
+            $this->render_content_tab( $low_score, $order );
+        }
+
+        echo '</div>';
+    }
+
+    private function render_content_tab( $low_score, $order ) {
         $posts      = get_posts(
             array(
                 'post_type'   => array( 'post', 'page' ),
@@ -23,9 +64,6 @@ class B2Sell_SEO_Analysis {
                 'numberposts' => -1,
             )
         );
-
-        $low_score = isset( $_GET['low_score'] );
-        $order     = isset( $_GET['order'] ) ? sanitize_text_field( $_GET['order'] ) : '';
 
         $rows = array();
         foreach ( $posts as $p ) {
@@ -69,10 +107,9 @@ class B2Sell_SEO_Analysis {
             );
         }
 
-        echo '<div class="wrap">';
-        echo '<h1>Análisis SEO</h1>';
         echo '<form method="get" style="margin-bottom:15px;">';
         echo '<input type="hidden" name="page" value="b2sell-seo-analisis" />';
+        echo '<input type="hidden" name="section" value="content" />';
         echo '<label><input type="checkbox" name="low_score" value="1" ' . checked( $low_score, true, false ) . ' /> Mostrar solo puntaje bajo (&lt;60)</label> ';
         echo '<select name="order">';
         echo '<option value="">Ordenar...</option>';
@@ -82,7 +119,16 @@ class B2Sell_SEO_Analysis {
         submit_button( 'Filtrar', '', '', false );
         echo '</form>';
 
-        echo '<p><a class="button" href="' . esc_url( admin_url( 'admin.php?page=b2sell-seo-analisis&technical=1' ) ) . '">SEO Técnico</a></p>';
+        $technical_url = add_query_arg(
+            array(
+                'page'      => 'b2sell-seo-analisis',
+                'technical' => 1,
+                'section'   => 'content',
+            ),
+            admin_url( 'admin.php' )
+        );
+
+        echo '<p><a class="button" href="' . esc_url( $technical_url ) . '">SEO Técnico</a></p>';
 
         echo '<p><button id="b2sell-export-csv" class="button">Exportar CSV</button> ';
         echo '<button id="b2sell-export-pdf" class="button">Exportar PDF</button></p>';
@@ -90,7 +136,14 @@ class B2Sell_SEO_Analysis {
         echo '<table id="b2sell-seo-table" class="widefat fixed">';
         echo '<thead><tr><th>Título</th><th>Tipo</th><th>Último análisis</th><th>Puntaje</th><th></th></tr></thead><tbody>';
         foreach ( $rows as $row ) {
-            $link    = admin_url( 'admin.php?page=b2sell-seo-analisis&post_id=' . $row['ID'] );
+            $link    = add_query_arg(
+                array(
+                    'page'    => 'b2sell-seo-analisis',
+                    'post_id' => $row['ID'],
+                    'section' => 'content',
+                ),
+                admin_url( 'admin.php' )
+            );
             $history = esc_attr( wp_json_encode( $row['history'] ) );
             echo '<tr class="b2sell-history-row" data-history="' . $history . '">';
             echo '<td>' . esc_html( $row['title'] ) . '</td>';
@@ -103,13 +156,157 @@ class B2Sell_SEO_Analysis {
         echo '</tbody></table>';
         echo '<div id="b2sell-history" style="display:none;margin-top:20px;"><canvas id="b2sell-history-chart" height="100"></canvas></div>';
 
-        echo '<h2 style="margin-top:40px;">Metadatos SEO</h2>';
+        $this->render_meta_table( $posts );
+
+        $logo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAAA8CAIAAACsOWLGAAAACXBIWXMAAA7EAAAOxAGVKw4bAAABSElEQVR4nO3b0WqDMBiG4Wbs/m/ZHQghSzTWdh8r+jxnbRQKfdG/KZZlWR7w177++wNwTcIiQlhECIsIYREhLCKERYSwiBAWEcIiQlhECIsIYREhLCKERYSwiBAWEcIiQlhECIsIYREhLCK+58ullO6d7nGx9oB2ae/E8f1uafNxtMkSn+kgrFX9RksppZT25aPJoi6NHXQnSuTyzt0K2266eiYXpHVVTLfy1BWramMSChNPhbU3SI3H1ObWe197wN4EJtBLemvGqsahapzxzVi38vqMVfnJxujdfSxVselcWF1Ge1WNAxZ3szEw/Vre3yCd7CxMTjzcID27xGc6CAte479CIoRFhLCIEBYRwiJCWEQIiwhhESEsIoRFhLCIEBYRwiJCWEQIiwhhESEsIoRFhLCIEBYRwiJCWEQIiwhhESEsIoRFxA9KdYd0WrGpfwAAAABJRU5ErkJggg==';
+        echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
+        echo '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>';
+        echo '<script>';
+        echo 'const b2sellLogo = "' . esc_js( $logo ) . '";';
+        echo 'document.getElementById("b2sell-export-csv").addEventListener("click",function(){var rows=document.querySelectorAll("#b2sell-seo-table tbody tr");var csv="Logo,"+b2sellLogo+"\nTítulo,Tipo,Último análisis,Puntaje\n";rows.forEach(function(r){var c=r.querySelectorAll("td");csv+=c[0].innerText+","+c[1].innerText+","+c[2].innerText+","+c[3].innerText+"\n";});csv+="\nDesarrollado por B2Sell SPA";var blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});var link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="b2sell-seo-report.csv";link.click();});';
+        echo 'document.getElementById("b2sell-export-pdf").addEventListener("click",function(){const {jsPDF}=window.jspdf;var doc=new jsPDF();var img=new Image();img.src=b2sellLogo;img.onload=function(){doc.addImage(img,"PNG",10,10,40,15);doc.setFontSize(16);doc.text("Reporte de Análisis SEO",10,30);var y=40;doc.setFontSize(10);document.querySelectorAll("#b2sell-seo-table tbody tr").forEach(function(r){var c=r.querySelectorAll("td");doc.text(c[0].innerText+" | "+c[1].innerText+" | "+c[2].innerText+" | "+c[3].innerText,10,y);y+=10;});doc.text("Desarrollado por B2Sell SPA",10,280);doc.save("b2sell-seo-report.pdf");};});';
+        echo 'var ctx=document.getElementById("b2sell-history-chart").getContext("2d");var chart=new Chart(ctx,{type:"line",data:{labels:[],datasets:[{label:"Puntaje",data:[],borderColor:"#0073aa",fill:false}]},options:{scales:{y:{beginAtZero:true,max:100}}}});';
+        echo 'document.querySelectorAll(".b2sell-history-row").forEach(function(row){row.addEventListener("click",function(e){if(e.target.tagName.toLowerCase()==="a"){return;}var data=JSON.parse(this.dataset.history||"[]");if(!data.length){return;}var labels=data.map(function(i){return i.date;});var scores=data.map(function(i){return parseInt(i.score);});chart.data.labels=labels;chart.data.datasets[0].data=scores;chart.update();document.getElementById("b2sell-history").style.display="block";});});';
+        echo '</script>';
+    }
+
+    private function render_products_tab() {
+        if ( ! post_type_exists( 'product' ) ) {
+            echo '<p>No se detecta el tipo de contenido de productos. Verifica que WooCommerce esté activo.</p>';
+            return;
+        }
+
+        $products = get_posts(
+            array(
+                'post_type'   => 'product',
+                'post_status' => 'publish',
+                'numberposts' => -1,
+            )
+        );
+
+        if ( empty( $products ) ) {
+            echo '<p>No hay productos publicados actualmente.</p>';
+            return;
+        }
+
+        echo '<p><button id="b2sell-product-alt-batch" class="button button-primary">Generar ALT masivo</button></p>';
+
+        echo '<table id="b2sell-products-table" class="widefat fixed">';
+        echo '<thead><tr><th>Producto</th><th>SKU</th><th>Último análisis</th><th>Puntaje</th><th>Imágenes sin ALT</th><th></th></tr></thead><tbody>';
+
+        foreach ( $products as $product ) {
+            $history = get_post_meta( $product->ID, '_b2sell_seo_history', true );
+            $last    = is_array( $history ) ? end( $history ) : false;
+            $date    = $last ? $last['date'] : '-';
+            $score   = $last ? intval( $last['score'] ) : '-';
+            $sku     = get_post_meta( $product->ID, '_sku', true );
+            $stats   = $this->get_product_image_alt_stats( $product->ID );
+            $missing = ( 0 === $stats['total'] ) ? '-' : $stats['missing'] . ' / ' . $stats['total'];
+            $analyze = add_query_arg(
+                array(
+                    'page'    => 'b2sell-seo-analisis',
+                    'post_id' => $product->ID,
+                    'section' => 'products',
+                ),
+                admin_url( 'admin.php' )
+            );
+            echo '<tr data-id="' . esc_attr( $product->ID ) . '">';
+            echo '<td>' . esc_html( $product->post_title ) . '</td>';
+            echo '<td>' . esc_html( $sku ) . '</td>';
+            echo '<td>' . esc_html( $date ) . '</td>';
+            echo '<td>' . esc_html( $score ) . '</td>';
+            echo '<td class="b2sell-product-missing">' . esc_html( $missing ) . '</td>';
+            echo '<td><a class="button" href="' . esc_url( $analyze ) . '">Analizar</a> <button class="button b2sell-product-alt" data-id="' . esc_attr( $product->ID ) . '">Generar ALT</button></td>';
+            echo '</tr>';
+        }
+
+        echo '</tbody></table>';
+
+        echo '<p>La descripción ALT se genera automáticamente usando el nombre del producto.</p>';
+
+        $this->render_meta_table( $products, 'Metadatos SEO de productos' );
+
+        $nonce = wp_create_nonce( 'b2sell_product_alt' );
+        echo '<script>var b2sellProductAltNonce="' . esc_js( $nonce ) . '";</script>';
+        ?>
+        <script>
+        jQuery(function($){
+            $('#b2sell-products-table').on('click','.b2sell-product-alt',function(e){
+                e.preventDefault();
+                var button=$(this);
+                if(button.prop('disabled')){
+                    return;
+                }
+                var original=button.text();
+                button.prop('disabled',true).text('Generando...');
+                $.post(ajaxurl,{action:'b2sell_generate_product_alt',product_id:button.data('id'),nonce:b2sellProductAltNonce},function(res){
+                    button.prop('disabled',false).text(original);
+                    if(res.success){
+                        var data=res.data||{};
+                        alert(data.message||'ALT generados correctamente.');
+                        var row=$('#b2sell-products-table tr[data-id="'+data.product_id+'"]');
+                        if(row.length){
+                            var display=data.total?data.missing+' / '+data.total:'-';
+                            row.find('.b2sell-product-missing').text(display);
+                        }
+                    }else{
+                        alert(res.data&&res.data.message?res.data.message:res.data);
+                    }
+                }).fail(function(){
+                    button.prop('disabled',false).text(original);
+                    alert('Error al conectar con el servidor.');
+                });
+            });
+            $('#b2sell-product-alt-batch').on('click',function(e){
+                e.preventDefault();
+                var button=$(this);
+                if(button.prop('disabled')){
+                    return;
+                }
+                if(!confirm('¿Generar ALT para todos los productos?')){
+                    return;
+                }
+                var original=button.text();
+                button.prop('disabled',true).text('Procesando...');
+                $.post(ajaxurl,{action:'b2sell_generate_product_alt_batch',nonce:b2sellProductAltNonce},function(res){
+                    button.prop('disabled',false).text(original);
+                    if(res.success){
+                        var data=res.data||{};
+                        alert(data.message||'ALT generados correctamente.');
+                        if(Array.isArray(data.products)){
+                            data.products.forEach(function(item){
+                                var row=$('#b2sell-products-table tr[data-id="'+item.product_id+'"]');
+                                if(row.length){
+                                    var display=item.total?item.missing+' / '+item.total:'-';
+                                    row.find('.b2sell-product-missing').text(display);
+                                }
+                            });
+                        }
+                    }else{
+                        alert(res.data&&res.data.message?res.data.message:res.data);
+                    }
+                }).fail(function(){
+                    button.prop('disabled',false).text(original);
+                    alert('Error al conectar con el servidor.');
+                });
+            });
+        });
+        </script>
+        <?php
+    }
+
+    private function render_meta_table( $items, $heading = 'Metadatos SEO' ) {
+        echo '<h2 style="margin-top:40px;">' . esc_html( $heading ) . '</h2>';
         echo '<table class="widefat" id="b2sell-meta-table"><thead><tr><th>Título</th><th>Título SEO</th><th>Meta description</th><th>Acciones</th></tr></thead><tbody>';
-        foreach ( $posts as $p ) {
-            $t       = get_post_meta( $p->ID, '_b2sell_seo_title', true );
-            $d       = get_post_meta( $p->ID, '_b2sell_seo_description', true );
-            $content = esc_attr( mb_substr( wp_strip_all_tags( $p->post_content ), 0, 1200 ) );
-            echo '<tr data-id="' . esc_attr( $p->ID ) . '" data-content="' . $content . '"><td>' . esc_html( $p->post_title ) . '</td><td class="b2sell-meta-title">' . esc_html( $t ) . '</td><td class="b2sell-meta-desc">' . esc_html( $d ) . '</td><td><button class="button b2sell-meta-edit">Editar</button> <button class="button b2sell-meta-gpt">Generar con GPT</button></td></tr>';
+        if ( empty( $items ) ) {
+            echo '<tr><td colspan="4">No hay elementos disponibles.</td></tr>';
+        } else {
+            foreach ( $items as $p ) {
+                $t       = get_post_meta( $p->ID, '_b2sell_seo_title', true );
+                $d       = get_post_meta( $p->ID, '_b2sell_seo_description', true );
+                $content = esc_attr( mb_substr( wp_strip_all_tags( $p->post_content ), 0, 1200 ) );
+                echo '<tr data-id="' . esc_attr( $p->ID ) . '" data-content="' . $content . '"><td>' . esc_html( $p->post_title ) . '</td><td class="b2sell-meta-title">' . esc_html( $t ) . '</td><td class="b2sell-meta-desc">' . esc_html( $d ) . '</td><td><button class="button b2sell-meta-edit">Editar</button> <button class="button b2sell-meta-gpt">Generar con GPT</button></td></tr>';
+            }
         }
         echo '</tbody></table>';
 
@@ -225,22 +422,175 @@ class B2Sell_SEO_Analysis {
         });
         </script>
         <?php
-
-        $logo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAAA8CAIAAACsOWLGAAAACXBIWXMAAA7EAAAOxAGVKw4bAAABSElEQVR4nO3b0WqDMBiG4Wbs/m/ZHQghSzTWdh8r+jxnbRQKfdG/KZZlWR7w177++wNwTcIiQlhECIsIYREhLCKERYSwiBAWEcIiQlhECIsIYREhLCKERYSwiBAWEcIiQlhECIsIYREhLCK+58ullO6d7nGx9oB2ae/E8f1uafNxtMkSn+kgrFX9RksppZT25aPJoi6NHXQnSuTyzt0K2266eiYXpHVVTLfy1BWramMSChNPhbU3SI3H1ObWe197wN4EJtBLemvGqsahapzxzVi38vqMVfnJxujdfSxVselcWF1Ge1WNAxZ3szEw/Vre3yCd7CxMTjzcID27xGc6CAte479CIoRFhLCIEBYRwiJCWEQIiwhhESEsIoRFhLCIEBYRwiJCWEQIiwhhESEsIoRFhLCIEBYRwiJCWEQIiwhhESEsIoRFxA9KdYd0WrGpfwAAAABJRU5ErkJggg==';
-        echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
-        echo '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>';
-        echo '<script>';
-        echo 'const b2sellLogo = "' . esc_js( $logo ) . '";';
-        echo 'document.getElementById("b2sell-export-csv").addEventListener("click",function(){var rows=document.querySelectorAll("#b2sell-seo-table tbody tr");var csv="Logo,"+b2sellLogo+"\nTítulo,Tipo,Último análisis,Puntaje\n";rows.forEach(function(r){var c=r.querySelectorAll("td");csv+=c[0].innerText+","+c[1].innerText+","+c[2].innerText+","+c[3].innerText+"\n";});csv+="\nDesarrollado por B2Sell SPA";var blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});var link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="b2sell-seo-report.csv";link.click();});';
-        echo 'document.getElementById("b2sell-export-pdf").addEventListener("click",function(){const {jsPDF}=window.jspdf;var doc=new jsPDF();var img=new Image();img.src=b2sellLogo;img.onload=function(){doc.addImage(img,"PNG",10,10,40,15);doc.setFontSize(16);doc.text("Reporte de Análisis SEO",10,30);var y=40;doc.setFontSize(10);document.querySelectorAll("#b2sell-seo-table tbody tr").forEach(function(r){var c=r.querySelectorAll("td");doc.text(c[0].innerText+" | "+c[1].innerText+" | "+c[2].innerText+" | "+c[3].innerText,10,y);y+=10;});doc.text("Desarrollado por B2Sell SPA",10,280);doc.save("b2sell-seo-report.pdf");};});';
-        echo 'var ctx=document.getElementById("b2sell-history-chart").getContext("2d");var chart=new Chart(ctx,{type:"line",data:{labels:[],datasets:[{label:"Puntaje",data:[],borderColor:"#0073aa",fill:false}]},options:{scales:{y:{beginAtZero:true,max:100}}}});';
-        echo 'document.querySelectorAll(".b2sell-history-row").forEach(function(row){row.addEventListener("click",function(e){if(e.target.tagName.toLowerCase()==="a"){return;}var data=JSON.parse(this.dataset.history||"[]");if(!data.length){return;}var labels=data.map(function(i){return i.date;});var scores=data.map(function(i){return parseInt(i.score);});chart.data.labels=labels;chart.data.datasets[0].data=scores;chart.update();document.getElementById("b2sell-history").style.display="block";});});';
-        echo '</script>';
-        echo '</div>';
     }
 
-    private function render_analysis( $post_id ) {
+    private function get_product_image_ids( $product_id ) {
+        $ids = array();
+        $thumbnail = get_post_thumbnail_id( $product_id );
+        if ( $thumbnail ) {
+            $ids[] = $thumbnail;
+        }
+        $gallery = get_post_meta( $product_id, '_product_image_gallery', true );
+        if ( $gallery ) {
+            $gallery_ids = array_filter( array_map( 'intval', explode( ',', $gallery ) ) );
+            $ids         = array_merge( $ids, $gallery_ids );
+        }
+        return array_values( array_unique( array_filter( $ids ) ) );
+    }
+
+    private function get_product_image_alt_stats( $product_id ) {
+        $ids     = $this->get_product_image_ids( $product_id );
+        $total   = count( $ids );
+        $missing = 0;
+
+        foreach ( $ids as $attachment_id ) {
+            $alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true );
+            if ( '' === trim( $alt ) ) {
+                $missing++;
+            }
+        }
+
+        return array(
+            'total'   => $total,
+            'missing' => $missing,
+        );
+    }
+
+    private function build_product_alt_text( $title, $index ) {
+        $base = trim( wp_strip_all_tags( $title ) );
+        if ( '' === $base ) {
+            $base = 'Producto';
+        }
+        return ( 1 === $index ) ? $base : sprintf( '%s - imagen %d', $base, $index );
+    }
+
+    private function update_product_images_alt( $product_id, $allow_empty = false ) {
+        $product = get_post( $product_id );
+        if ( ! $product || 'product' !== $product->post_type ) {
+            return new WP_Error( 'invalid_product', 'Producto no válido.' );
+        }
+
+        $ids = $this->get_product_image_ids( $product_id );
+        if ( empty( $ids ) ) {
+            if ( $allow_empty ) {
+                return array(
+                    'product_id' => $product_id,
+                    'total'      => 0,
+                    'updated'    => 0,
+                    'missing'    => 0,
+                );
+            }
+            return new WP_Error( 'no_images', 'El producto no tiene imágenes asociadas.' );
+        }
+
+        $index   = 1;
+        $updated = 0;
+        foreach ( $ids as $attachment_id ) {
+            $alt_text = $this->build_product_alt_text( $product->post_title, $index );
+            update_post_meta( $attachment_id, '_wp_attachment_image_alt', $alt_text );
+            $index++;
+            $updated++;
+        }
+
+        return array(
+            'product_id' => $product_id,
+            'total'      => count( $ids ),
+            'updated'    => $updated,
+            'missing'    => 0,
+        );
+    }
+
+    public function ajax_generate_product_alt() {
+        check_ajax_referer( 'b2sell_product_alt', 'nonce' );
+        $product_id = intval( $_POST['product_id'] ?? 0 );
+        if ( ! $product_id ) {
+            wp_send_json_error( array( 'message' => 'Producto no válido.' ) );
+        }
+        if ( ! current_user_can( 'edit_post', $product_id ) ) {
+            wp_send_json_error( array( 'message' => 'No tienes permisos suficientes.' ) );
+        }
+
+        $result = $this->update_product_images_alt( $product_id );
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error(
+                array(
+                    'message' => $result->get_error_message(),
+                )
+            );
+        }
+
+        $result['message'] = sprintf(
+            'Se actualizaron %d imágenes para el producto.',
+            $result['updated']
+        );
+
+        wp_send_json_success( $result );
+    }
+
+    public function ajax_generate_product_alt_batch() {
+        check_ajax_referer( 'b2sell_product_alt', 'nonce' );
+        if ( ! current_user_can( 'edit_products' ) && ! current_user_can( 'manage_woocommerce' ) && ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'No tienes permisos suficientes.' ) );
+        }
+
+        $products = get_posts(
+            array(
+                'post_type'   => 'product',
+                'post_status' => 'publish',
+                'numberposts' => -1,
+                'fields'      => 'ids',
+            )
+        );
+
+        if ( empty( $products ) ) {
+            wp_send_json_error( array( 'message' => 'No hay productos disponibles para actualizar.' ) );
+        }
+
+        $processed     = 0;
+        $total_updated = 0;
+        $details       = array();
+
+        foreach ( $products as $product_id ) {
+            if ( ! current_user_can( 'edit_post', $product_id ) ) {
+                continue;
+            }
+            $result = $this->update_product_images_alt( $product_id, true );
+            if ( is_wp_error( $result ) ) {
+                continue;
+            }
+            $processed++;
+            $total_updated += $result['updated'];
+            $stats = $this->get_product_image_alt_stats( $product_id );
+            $details[] = array(
+                'product_id' => $product_id,
+                'total'      => $stats['total'],
+                'missing'    => $stats['missing'],
+            );
+        }
+
+        if ( 0 === $processed ) {
+            wp_send_json_error( array( 'message' => 'No se pudieron actualizar los ALT de los productos.' ) );
+        }
+
+        $message = sprintf(
+            'Se actualizaron ALT en %d imágenes de %d productos.',
+            $total_updated,
+            $processed
+        );
+
+        wp_send_json_success(
+            array(
+                'message'  => $message,
+                'products' => $details,
+            )
+        );
+    }
+
+
+
+    private function render_analysis( $post_id, $section = 'content' ) {
         $post    = get_post( $post_id );
+        $section = in_array( $section, array( 'products', 'content' ), true ) ? $section : 'content';
         $keyword = isset( $_POST['b2sell_keyword'] ) ? sanitize_text_field( $_POST['b2sell_keyword'] ) : '';
         $results = false;
 
@@ -258,8 +608,18 @@ class B2Sell_SEO_Analysis {
             update_post_meta( $post_id, '_b2sell_seo_history', $history );
         }
 
-        $nonce = wp_create_nonce( 'b2sell_gpt_nonce' );
+        $nonce      = wp_create_nonce( 'b2sell_gpt_nonce' );
+        $back_url   = add_query_arg(
+            array(
+                'page'    => 'b2sell-seo-analisis',
+                'section' => $section,
+            ),
+            admin_url( 'admin.php' )
+        );
+        $back_label = ( 'products' === $section ) ? '« Volver a Productos' : '« Volver al listado';
+
         echo '<div class="wrap">';
+        echo '<p><a href="' . esc_url( $back_url ) . '">' . esc_html( $back_label ) . '</a></p>';
         echo '<h1>Analizando: ' . esc_html( $post->post_title ) . '</h1>';
         echo '<form method="post">';
         echo '<label for="b2sell_keyword">Palabra clave principal:</label> ';
