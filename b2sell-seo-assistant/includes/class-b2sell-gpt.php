@@ -47,40 +47,42 @@ class B2Sell_GPT_Generator {
             <h1>Generador de Contenido (GPT)</h1>
             <h2 class="nav-tab-wrapper">
                 <a href="<?php echo $quick_url; ?>" class="nav-tab <?php echo 'quick' === $tab ? 'nav-tab-active' : ''; ?>">Generador rápido</a>
-                <a href="<?php echo $blog_url; ?>" class="nav-tab <?php echo 'blog' === $tab ? 'nav-tab-active' : ''; ?>">Crear Blog</a>
+                <a href="<?php echo $blog_url; ?>" class="nav-tab <?php echo 'blog' === $tab ? 'nav-tab-active' : ''; ?>">Crear Blog SEO</a>
             </h2>
             <?php if ( 'blog' === $tab ) : ?>
-                <div class="b2sell-card">
-                    <form id="b2sell-blog-form">
-                        <p>
-                            <label for="b2sell-blog-keywords">Palabras clave (separadas por coma)</label><br />
+                <div class="crear-blog-form">
+                    <form id="b2sell-blog-form" class="crear-blog-form__form">
+                        <div class="crear-blog-form__group">
+                            <label for="b2sell-blog-keywords">Palabras clave (separadas por coma)</label>
                             <input type="text" id="b2sell-blog-keywords" name="keywords" class="regular-text" required />
-                        </p>
-                        <p>
-                            <label for="b2sell-blog-word-count">Cantidad de palabras</label><br />
+                        </div>
+                        <div class="crear-blog-form__group">
+                            <label for="b2sell-blog-word-count">Cantidad de palabras</label>
                             <input type="number" id="b2sell-blog-word-count" name="word_count" value="800" min="100" step="50" />
-                        </p>
-                        <p>
-                            <label for="b2sell-blog-image-url">URL de la imagen destacada</label><br />
+                        </div>
+                        <div class="crear-blog-form__group">
+                            <label for="b2sell-blog-image-url">URL de la imagen destacada</label>
                             <input type="url" id="b2sell-blog-image-url" name="image_url" class="regular-text" required />
-                        </p>
-                        <p>
-                            <label for="b2sell-blog-cta-text">Texto del call to action</label><br />
+                        </div>
+                        <div class="crear-blog-form__group">
+                            <label for="b2sell-blog-cta-text">Texto del call to action</label>
                             <input type="text" id="b2sell-blog-cta-text" name="cta_text" class="regular-text" required />
-                        </p>
-                        <p>
-                            <label for="b2sell-blog-cta-page">Página para el CTA</label><br />
+                        </div>
+                        <div class="crear-blog-form__group">
+                            <label for="b2sell-blog-cta-page">Página para el CTA</label>
                             <select id="b2sell-blog-cta-page" name="cta_page" required>
                                 <option value="">Selecciona una página</option>
                                 <?php foreach ( $pages as $page ) : ?>
                                     <option value="<?php echo esc_attr( $page->ID ); ?>"><?php echo esc_html( $page->post_title ); ?></option>
                                 <?php endforeach; ?>
                             </select>
-                        </p>
-                        <p><button type="submit" class="button button-primary">Generar con GPT</button></p>
+                        </div>
+                        <div class="crear-blog-form__actions">
+                            <button type="submit" class="button button-primary crear-blog-form__submit">Generar con GPT</button>
+                        </div>
                     </form>
                 </div>
-                <div id="blog-preview" class="b2sell-card" style="display:none;"></div>
+                <div id="blog-preview" class="crear-blog-preview" style="display:none;"></div>
             <?php else : ?>
                 <div class="b2sell-card">
                     <p>Ingrese una palabra clave o seleccione un post/página existente.</p>
@@ -152,12 +154,12 @@ class B2Sell_GPT_Generator {
             function b2sellBlogSave(actionType, content){
                 const preview = $('#blog-preview');
                 if(!preview.length){return;}
-                let notice = preview.find('.b2sell-blog-feedback');
+                let notice = preview.find('.crear-blog-feedback');
                 if(!notice.length){
-                    notice = $('<div class="b2sell-blog-feedback" style="margin-top:15px;"></div>');
+                    notice = $('<div class="crear-blog-feedback"></div>');
                     preview.append(notice);
                 }
-                notice.removeClass('b2sell-red b2sell-green').addClass('b2sell-yellow').text('Guardando...');
+                notice.removeClass('is-success is-error is-loading').addClass('is-loading').text('Guardando...');
                 const temp=document.createElement('div');
                 temp.innerHTML=content;
                 const h1=temp.querySelector('h1');
@@ -185,10 +187,10 @@ class B2Sell_GPT_Generator {
                         if(actionType==='publicar' && res.data.view_link){
                             html+=' <a href="'+res.data.view_link+'" target="_blank" rel="noopener noreferrer">Ver</a>';
                         }
-                        notice.removeClass('b2sell-yellow b2sell-red').addClass('b2sell-green').html(html);
+                        notice.removeClass('is-loading is-error').addClass('is-success').html(html);
                     }else{
                         const msg = res.data && res.data.message ? res.data.message : res.data;
-                        notice.removeClass('b2sell-yellow b2sell-green').addClass('b2sell-red').text(msg);
+                        notice.removeClass('is-loading is-success').addClass('is-error').text(msg);
                     }
                 });
             }
@@ -206,23 +208,23 @@ class B2Sell_GPT_Generator {
                         e.preventDefault();
                         const data={action:'b2sell_gpt_generate_blog',_wpnonce:b2sellBlogNonce,keywords:$('#b2sell-blog-keywords').val(),word_count:$('#b2sell-blog-word-count').val(),image_url:$('#b2sell-blog-image-url').val(),cta_text:$('#b2sell-blog-cta-text').val(),cta_page:$('#b2sell-blog-cta-page').val()};
                         const preview=$('#blog-preview');
-                        preview.show().html('<p>Generando contenido...</p>');
-                        preview.find('.b2sell-blog-feedback').remove();
+                        preview.show().html('<div class="crear-blog-preview__loading">Generando contenido...</div>');
+                        preview.find('.crear-blog-feedback').remove();
                         $.post(ajaxurl,data,function(res){
                             if(res.success){
                                 blogContent=res.data.content;
-                                let html='<h2>Vista previa del blog</h2>';
-                                html+='<div class="b2sell-blog-content">'+res.data.content+'</div>';
-                                html+='<div class="b2sell-blog-actions">';
-                                html+='<button type="button" class="button" id="b2sell-blog-save-draft">Guardar como borrador</button> ';
-                                html+='<button type="button" class="button button-primary" id="b2sell-blog-publish">Publicar ahora</button> ';
-                                html+='<button type="button" class="button" id="b2sell-blog-download">Descargar texto</button>';
+                                let html='<div class="crear-blog-preview__header"><h2>Vista previa del blog</h2></div>';
+                                html+='<div class="crear-blog-preview__content">'+res.data.content+'</div>';
+                                html+='<div class="crear-blog-preview__actions">';
+                                html+='<button type="button" class="crear-blog-secondary-btn" id="b2sell-blog-save-draft">Guardar como borrador</button>';
+                                html+='<button type="button" class="crear-blog-secondary-btn" id="b2sell-blog-publish">Publicar ahora</button>';
+                                html+='<button type="button" class="crear-blog-secondary-btn" id="b2sell-blog-download">Descargar texto</button>';
                                 html+='</div>';
                                 preview.html(html);
                             }else{
                                 blogContent='';
                                 const msg=res.data && res.data.message ? res.data.message : res.data;
-                                preview.html('<div class="b2sell-red" style="padding:10px;">'+msg+'</div>');
+                                preview.html('<div class="crear-blog-preview__error">'+msg+'</div>');
                             }
                         });
                     });
