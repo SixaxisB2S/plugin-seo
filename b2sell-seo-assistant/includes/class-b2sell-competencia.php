@@ -18,6 +18,116 @@ class B2Sell_Competencia {
         add_action( 'wp_ajax_b2sell_competencia_interpret', array( $this, 'ajax_interpret' ) );
     }
 
+    private function is_sequential_array( $array ) {
+        if ( ! is_array( $array ) ) {
+            return false;
+        }
+        $expected = 0;
+        foreach ( $array as $key => $value ) {
+            if ( $key !== $expected ) {
+                return false;
+            }
+            $expected++;
+        }
+        return true;
+    }
+
+    private function build_query_plan( $provider, $result_count ) {
+        $result_count = in_array( $result_count, array( 10, 20, 40 ), true ) ? $result_count : 40;
+        if ( 'serpapi' === $provider ) {
+            if ( 10 === $result_count ) {
+                return array(
+                    array(
+                        'start' => 0,
+                        'num'   => 10,
+                    ),
+                );
+            }
+            if ( 20 === $result_count ) {
+                return array(
+                    array(
+                        'start' => 0,
+                        'num'   => 20,
+                    ),
+                );
+            }
+            return array(
+                array(
+                    'start' => 0,
+                    'num'   => 20,
+                ),
+                array(
+                    'start' => 20,
+                    'num'   => 20,
+                ),
+            );
+        }
+        $remaining = $result_count;
+        $start     = 1;
+        $plan      = array();
+        while ( $remaining > 0 ) {
+            $num     = min( 10, $remaining );
+            $plan[]  = array(
+                'start' => $start,
+                'num'   => $num,
+            );
+            $start   += $num;
+            $remaining -= $num;
+        }
+        return $plan;
+    }
+
+    private function maybe_get_cached_analysis( $keyword, $provider, $result_count, $competitors, $now ) {
+        global $wpdb;
+        $row = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT * FROM {$this->table} WHERE keyword=%s AND provider=%s AND date >= DATE_SUB(%s, INTERVAL 1 DAY) ORDER BY date DESC LIMIT 1",
+                $keyword,
+                $provider,
+                $now
+            )
+        );
+        if ( ! $row ) {
+            return null;
+        }
+        $meta_data        = json_decode( $row->keywords, true );
+        $available_results = 0;
+        if ( is_array( $meta_data ) ) {
+            if ( isset( $meta_data['result_count'] ) ) {
+                $available_results = intval( $meta_data['result_count'] );
+            } elseif ( $this->is_sequential_array( $meta_data ) ) {
+                $available_results = 50; // Compatibilidad con registros antiguos.
+            }
+        }
+        if ( $available_results && $available_results < $result_count ) {
+            return null;
+        }
+        $stored_results = json_decode( $row->results, true );
+        if ( ! is_array( $stored_results ) ) {
+            return null;
+        }
+        $stored_map = array();
+        foreach ( $stored_results as $entry ) {
+            $domain = $entry['domain'] ?? '';
+            if ( $domain ) {
+                $stored_map[ $domain ] = intval( $entry['rank'] ?? 0 );
+            }
+        }
+        foreach ( $competitors as $domain ) {
+            if ( ! array_key_exists( $domain, $stored_map ) ) {
+                return null;
+            }
+        }
+        $comp_ranks = array();
+        foreach ( $competitors as $domain ) {
+            $comp_ranks[ $domain ] = $stored_map[ $domain ];
+        }
+        return array(
+            'mine'        => (int) $row->my_rank,
+            'competitors' => $comp_ranks,
+        );
+    }
+
     private function ctr_from_rank( $rank ) {
         if ( 1 === $rank ) {
             return 0.27;
@@ -207,7 +317,16 @@ class B2Sell_Competencia {
         echo '<div id="b2sell_comp_tab_analysis" class="b2sell-comp-tab">';
         echo '<p>Ingresa hasta 10 palabras clave (una por línea) y hasta 5 dominios competidores.</p>';
         echo '<textarea id="b2sell_comp_keywords" placeholder="Palabras clave" style="width:300px;height:100px;"></textarea> ';
-        echo '<textarea id="b2sell_comp_domains" placeholder="competidor1.com\ncompetidor2.com" style="width:300px;height:100px;margin-left:20px;">' . esc_textarea( implode( "\n", $competitors ) ) . '</textarea> ';
+        echo '<textarea id="b2sell_comp_domains" placeholder="competidor1.com\ncompetidor2.com" style="width:300px;height:100px;margin-left:20px;">' . esc_textarea( implode( "\n", $competitors ) ) . '</textarea>';
+        echo '<div style="margin-top:15px;">';
+        echo '<label for="b2sell_comp_result_count">Resultados a analizar por keyword:</label> ';
+        echo '<select id="b2sell_comp_result_count" style="margin-left:10px;">';
+        echo '<option value="10">Primeras 10 posiciones</option>';
+        echo '<option value="20">Primeras 20 posiciones</option>';
+        echo '<option value="40" selected>Primeras 40 posiciones</option>';
+        echo '</select>';
+        echo '</div>';
+        echo '<p class="description" id="b2sell_comp_query_notice" style="margin-top:10px;">Los análisis realizados en las últimas 24 horas se reutilizarán automáticamente.</p>';
         echo '<button class="button" id="b2sell_comp_search_btn">Buscar</button>';
         echo '<div id="b2sell_comp_results" style="margin-top:20px;"></div>';
         echo '</div>';
@@ -242,22 +361,47 @@ class B2Sell_Competencia {
 
         echo '<div id="b2sell_comp_hist_modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);">';
         echo '<div style="background:#fff;padding:20px;max-width:800px;margin:50px auto;"><div id="b2sell_comp_hist_modal_content"></div><button class="button" id="b2sell_comp_hist_close">Cerrar</button></div></div>';
-        echo '<script>var b2sellCompNonce="' . esc_js( $nonce ) . '";</script>';
+        echo '<script>var b2sellCompNonce="' . esc_js( $nonce ) . '",b2sellCompProvider="' . esc_js( $provider ) . '";</script>';
         echo '<script>
         jQuery(function($){
             $(".nav-tab-wrapper .nav-tab").on("click",function(e){e.preventDefault();var t=$(this).data("tab");$(".nav-tab").removeClass("nav-tab-active");$(this).addClass("nav-tab-active");$(".b2sell-comp-tab").hide();$("#b2sell_comp_tab_"+t).show();});
-            $("#b2sell_comp_search_btn").on("click", function(){
-                var kws = $("#b2sell_comp_keywords").val().split(/\\n+/)
+            var baseNotice="Los análisis realizados en las últimas 24 horas se reutilizarán automáticamente.";
+            function getKeywords(){
+                return $("#b2sell_comp_keywords").val().split(/\\n+/)
                     .map(function(s){return $.trim(s);})
                     .filter(function(s){return s.length;})
                     .slice(0,10);
-                var doms = $("#b2sell_comp_domains").val().split(/\\n+/)
+            }
+            function updateNotice(){
+                var kws=getKeywords();
+                var resultCount=parseInt($("#b2sell_comp_result_count").val(),10)||40;
+                var perKeyword=1;
+                if("serpapi"===b2sellCompProvider){
+                    perKeyword=resultCount>=40?2:1;
+                }else{
+                    perKeyword=Math.ceil(resultCount/10);
+                }
+                if(!kws.length){
+                    $("#b2sell_comp_query_notice").text(baseNotice);
+                    return;
+                }
+                var total=perKeyword*kws.length;
+                var text="Se estiman aproximadamente "+total+" consultas a la API ("+perKeyword+" por keyword). "+baseNotice;
+                $("#b2sell_comp_query_notice").text(text);
+            }
+            $("#b2sell_comp_keywords").on("input",updateNotice);
+            $("#b2sell_comp_result_count").on("change",updateNotice);
+            updateNotice();
+            $("#b2sell_comp_search_btn").on("click", function(){
+                var kws=getKeywords();
+                var doms=$("#b2sell_comp_domains").val().split(/\\n+/)
                     .map(function(s){return $.trim(s);})
                     .filter(function(s){return s.length;})
                     .slice(0,5);
                 if(!kws.length){return;}
+                var resultCount=parseInt($("#b2sell_comp_result_count").val(),10)||40;
                 $("#b2sell_comp_results").html("Analizando...");
-                $.post(ajaxurl,{action:"b2sell_competencia_search",keywords:kws,competitors:doms,_wpnonce:b2sellCompNonce},function(res){
+                $.post(ajaxurl,{action:"b2sell_competencia_search",keywords:kws,competitors:doms,result_count:resultCount,_wpnonce:b2sellCompNonce},function(res){
                     if(res.success){
                         var data=res.data;
                         var comps=data.competitors;
@@ -286,8 +430,12 @@ class B2Sell_Competencia {
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( 'Permisos insuficientes' );
         }
-        $keywords    = isset( $_POST['keywords'] ) ? array_slice( array_filter( array_map( 'sanitize_text_field', (array) $_POST['keywords'] ) ), 0, 10 ) : array();
-        $competitors = isset( $_POST['competitors'] ) ? array_slice( array_filter( array_map( 'sanitize_text_field', (array) $_POST['competitors'] ) ), 0, 5 ) : array();
+        $keywords     = isset( $_POST['keywords'] ) ? array_slice( array_filter( array_map( 'sanitize_text_field', (array) $_POST['keywords'] ) ), 0, 10 ) : array();
+        $competitors  = isset( $_POST['competitors'] ) ? array_slice( array_filter( array_map( 'sanitize_text_field', (array) $_POST['competitors'] ) ), 0, 5 ) : array();
+        $result_count = isset( $_POST['result_count'] ) ? intval( $_POST['result_count'] ) : 40;
+        if ( ! in_array( $result_count, array( 10, 20, 40 ), true ) ) {
+            $result_count = 40;
+        }
         update_option( 'b2sell_comp_domains', $competitors );
         $api_key  = get_option( 'b2sell_google_api_key', '' );
         $cx       = get_option( 'b2sell_google_cx', '' );
@@ -303,49 +451,74 @@ class B2Sell_Competencia {
         if ( ( 'google' === $provider && ( ! $api_key || ! $cx ) ) || ( 'serpapi' === $provider && ! $serpapi ) ) {
             wp_send_json_error( 'Proveedor de datos no configurado correctamente. Revisa la configuración.' );
         }
-        $domain  = parse_url( home_url(), PHP_URL_HOST );
-        $results = array();
+        $domain      = parse_url( home_url(), PHP_URL_HOST );
+        $results     = array();
+        $now         = current_time( 'mysql' );
+        $query_plan  = $this->build_query_plan( $provider, $result_count );
         foreach ( $keywords as $keyword ) {
-            $my_rank   = 0;
+            $cached = $this->maybe_get_cached_analysis( $keyword, $provider, $result_count, $competitors, $now );
+            if ( $cached ) {
+                $results[ $keyword ] = $cached;
+                continue;
+            }
+            $my_rank    = 0;
             $comp_ranks = array();
             foreach ( $competitors as $c ) {
                 $comp_ranks[ $c ] = 0;
             }
-            $found = 0;
-            for ( $page = 0; $page < 5 && $found < ( count( $comp_ranks ) + 1 ); $page++ ) {
+            $found  = 0;
+            $target = max( 1, count( $comp_ranks ) + 1 );
+            foreach ( $query_plan as $query ) {
+                if ( $found >= $target ) {
+                    break;
+                }
                 if ( 'serpapi' === $provider ) {
-                    $url = add_query_arg( array(
-                        'engine' => 'google',
-                        'api_key'=> $serpapi,
-                        'q'      => $keyword,
-                        'num'    => 10,
-                        'start'  => $page * 10,
-                        'hl'     => $hl,
-                        'gl'     => $gl,
-                    ), 'https://serpapi.com/search.json' );
+                    $url      = add_query_arg(
+                        array(
+                            'engine' => 'google',
+                            'api_key'=> $serpapi,
+                            'q'      => $keyword,
+                            'num'    => $query['num'],
+                            'start'  => $query['start'],
+                            'hl'     => $hl,
+                            'gl'     => $gl,
+                        ),
+                        'https://serpapi.com/search.json'
+                    );
                     $response = wp_remote_get( $url );
-                    if ( is_wp_error( $response ) ) { continue; }
-                    $data  = json_decode( wp_remote_retrieve_body( $response ), true );
-                    $items = $data['organic_results'] ?? array();
+                    if ( is_wp_error( $response ) ) {
+                        continue;
+                    }
+                    $data        = json_decode( wp_remote_retrieve_body( $response ), true );
+                    $items       = $data['organic_results'] ?? array();
+                    $rank_offset = $query['start'];
+                    $rank_base   = 1;
                 } else {
-                    $url = add_query_arg( array(
-                        'key'   => $api_key,
-                        'cx'    => $cx,
-                        'q'     => $keyword,
-                        'num'   => 10,
-                        'start' => $page * 10 + 1,
-                        'gl'    => $gl,
-                        'hl'    => $hl,
-                    ), 'https://www.googleapis.com/customsearch/v1' );
+                    $url      = add_query_arg(
+                        array(
+                            'key'   => $api_key,
+                            'cx'    => $cx,
+                            'q'     => $keyword,
+                            'num'   => $query['num'],
+                            'start' => $query['start'],
+                            'gl'    => $gl,
+                            'hl'    => $hl,
+                        ),
+                        'https://www.googleapis.com/customsearch/v1'
+                    );
                     $response = wp_remote_get( $url );
-                    if ( is_wp_error( $response ) ) { continue; }
-                    $data  = json_decode( wp_remote_retrieve_body( $response ), true );
-                    $items = $data['items'] ?? array();
+                    if ( is_wp_error( $response ) ) {
+                        continue;
+                    }
+                    $data        = json_decode( wp_remote_retrieve_body( $response ), true );
+                    $items       = $data['items'] ?? array();
+                    $rank_offset = $query['start'];
+                    $rank_base   = 0;
                 }
                 foreach ( $items as $index => $item ) {
                     $link        = $item['link'] ?? '';
                     $item_domain = parse_url( $link, PHP_URL_HOST );
-                    $rank        = $page * 10 + $index + 1;
+                    $rank        = $rank_offset + $index + $rank_base;
                     if ( ! $my_rank && $item_domain === $domain ) {
                         $my_rank = $rank;
                         $found++;
@@ -370,7 +543,12 @@ class B2Sell_Competencia {
             $wpdb->insert( $this->table, array(
                 'date'     => current_time( 'mysql' ),
                 'keyword'  => $keyword,
-                'keywords' => wp_json_encode( $keywords ),
+                'keywords' => wp_json_encode(
+                    array(
+                        'keywords'     => $keywords,
+                        'result_count' => $result_count,
+                    )
+                ),
                 'post_id'  => 0,
                 'results'  => wp_json_encode( $store ),
                 'my_rank'  => $my_rank,
