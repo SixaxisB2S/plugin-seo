@@ -53,6 +53,10 @@ class B2Sell_GPT_Generator {
                 <div class="crear-blog-form">
                     <form id="b2sell-blog-form" class="crear-blog-form__form">
                         <div class="crear-blog-form__group">
+                            <label for="b2sell-blog-post-topic">Tema central del post</label>
+                            <textarea id="b2sell-blog-post-topic" name="post_topic" required></textarea>
+                        </div>
+                        <div class="crear-blog-form__group">
                             <label for="b2sell-blog-keywords">Palabras clave (separadas por coma)</label>
                             <input type="text" id="b2sell-blog-keywords" name="keywords" class="regular-text" required />
                         </div>
@@ -170,6 +174,7 @@ class B2Sell_GPT_Generator {
                     estado:actionType,
                     content:content,
                     title:title,
+                    post_topic:$('#b2sell-blog-post-topic').val(),
                     image_url:$('#b2sell-blog-image-url').val(),
                     cta_text:$('#b2sell-blog-cta-text').val(),
                     cta_page:$('#b2sell-blog-cta-page').val(),
@@ -206,7 +211,7 @@ class B2Sell_GPT_Generator {
                     let blogContent='';
                     blogForm.on('submit',function(e){
                         e.preventDefault();
-                        const data={action:'b2sell_gpt_generate_blog',_wpnonce:b2sellBlogNonce,keywords:$('#b2sell-blog-keywords').val(),word_count:$('#b2sell-blog-word-count').val(),image_url:$('#b2sell-blog-image-url').val(),cta_text:$('#b2sell-blog-cta-text').val(),cta_page:$('#b2sell-blog-cta-page').val()};
+                        const data={action:'b2sell_gpt_generate_blog',_wpnonce:b2sellBlogNonce,post_topic:$('#b2sell-blog-post-topic').val(),keywords:$('#b2sell-blog-keywords').val(),word_count:$('#b2sell-blog-word-count').val(),image_url:$('#b2sell-blog-image-url').val(),cta_text:$('#b2sell-blog-cta-text').val(),cta_page:$('#b2sell-blog-cta-page').val()};
                         const preview=$('#blog-preview');
                         preview.show().html('<div class="crear-blog-preview__loading">Generando contenido...</div>');
                         preview.find('.crear-blog-feedback').remove();
@@ -346,17 +351,19 @@ class B2Sell_GPT_Generator {
             wp_send_json_error( array( 'message' => 'Permisos insuficientes' ) );
         }
 
+        $post_topic = sanitize_textarea_field( wp_unslash( $_POST['post_topic'] ?? '' ) );
         $keywords  = sanitize_text_field( wp_unslash( $_POST['keywords'] ?? '' ) );
         $word_count = intval( $_POST['word_count'] ?? 800 );
         $image_url = esc_url_raw( wp_unslash( $_POST['image_url'] ?? '' ) );
         $cta_text  = sanitize_text_field( wp_unslash( $_POST['cta_text'] ?? '' ) );
         $cta_page  = intval( $_POST['cta_page'] ?? 0 );
 
+        $post_topic = mb_substr( $post_topic, 0, 500 );
         $keywords   = mb_substr( $keywords, 0, 500 );
         $word_count = max( 100, min( $word_count, 3000 ) );
         $cta_text   = mb_substr( $cta_text, 0, 200 );
 
-        if ( empty( $keywords ) || empty( $image_url ) || empty( $cta_text ) || ! $cta_page ) {
+        if ( empty( $post_topic ) || empty( $keywords ) || empty( $image_url ) || empty( $cta_text ) || ! $cta_page ) {
             wp_send_json_error( array( 'message' => 'Todos los campos son obligatorios.' ) );
         }
 
@@ -365,9 +372,10 @@ class B2Sell_GPT_Generator {
             wp_send_json_error( array( 'message' => 'La página seleccionada no es válida.' ) );
         }
 
-        $prompt  = "Genera un post de blog optimizado para SEO con las siguientes condiciones:\n";
+        $prompt  = 'Tema central: ' . $post_topic . "\n";
         $prompt .= 'Palabras clave: ' . $keywords . "\n";
-        $prompt .= 'Cantidad de texto: ' . $word_count . " palabras\n";
+        $prompt .= 'Cantidad de texto: ' . $word_count . " palabras\n\n";
+        $prompt .= "Genera un post de blog optimizado para SEO con las siguientes condiciones:\n";
         $prompt .= "Estructura:\n\n";
         $prompt .= "<H1> con la keyword principal\n";
         $prompt .= "Opening persuasivo de 2–3 frases que incluya la keyword\n";
@@ -377,7 +385,7 @@ class B2Sell_GPT_Generator {
         $prompt .= "<H2> con otra variación de keyword\n";
         $prompt .= "Contenido en párrafo con ejemplos o consejos\n";
         $prompt .= 'Call to action al final con el texto ' . $cta_text . ' que redirija a ' . $cta_link . "\n";
-        $prompt .= 'El contenido debe ser natural, atractivo y optimizado para SEO sin cortar palabras ni repetir en exceso.';
+        $prompt .= 'El contenido debe ser natural, atractivo y optimizado para SEO sin cortar palabras ni repetir en exceso, y debe alinearse con el tema central indicado al inicio.';
 
         $result = $this->request_openai_content( $prompt );
         if ( is_wp_error( $result ) ) {
@@ -429,8 +437,11 @@ class B2Sell_GPT_Generator {
             $title = 'Entrada generada con GPT';
         }
 
-        $cta_page = intval( $_POST['cta_page'] ?? 0 );
-        $cta_text = sanitize_text_field( wp_unslash( $_POST['cta_text'] ?? '' ) );
+        $cta_page  = intval( $_POST['cta_page'] ?? 0 );
+        $cta_text  = sanitize_text_field( wp_unslash( $_POST['cta_text'] ?? '' ) );
+        $post_topic = sanitize_textarea_field( wp_unslash( $_POST['post_topic'] ?? '' ) );
+
+        $post_topic = mb_substr( $post_topic, 0, 500 );
 
         if ( $cta_page ) {
             $cta_url = get_permalink( $cta_page );
@@ -460,6 +471,10 @@ class B2Sell_GPT_Generator {
 
         if ( is_wp_error( $post_id ) ) {
             wp_send_json_error( array( 'message' => $post_id->get_error_message() ) );
+        }
+
+        if ( $post_topic ) {
+            update_post_meta( $post_id, '_seo_post_topic', $post_topic );
         }
 
         $image_url = esc_url_raw( wp_unslash( $_POST['image_url'] ?? '' ) );
