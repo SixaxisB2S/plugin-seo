@@ -65,8 +65,11 @@ class B2Sell_GPT_Generator {
                             <input type="number" id="b2sell-blog-word-count" name="word_count" value="800" min="100" step="50" />
                         </div>
                         <div class="crear-blog-form__group">
-                            <label for="b2sell-blog-image-url">URL de la imagen destacada</label>
-                            <input type="url" id="b2sell-blog-image-url" name="image_url" class="regular-text" required />
+                            <label for="b2sell-blog-image-file">Imagen destacada</label>
+                            <input type="file" id="b2sell-blog-image-file" name="image_file" accept="image/*" />
+                            <input type="hidden" id="b2sell-blog-image-id" name="image_id" />
+                            <input type="hidden" id="b2sell-blog-image-url" name="image_url" />
+                            <p class="crear-blog-form__help">Sube la imagen destacada que acompañará al artículo.</p>
                         </div>
                         <div class="crear-blog-form__group">
                             <label for="b2sell-blog-cta-text">Texto del call to action</label>
@@ -175,6 +178,7 @@ class B2Sell_GPT_Generator {
                     content:content,
                     title:title,
                     post_topic:$('#b2sell-blog-post-topic').val(),
+                    image_id:$('#b2sell-blog-image-id').val(),
                     image_url:$('#b2sell-blog-image-url').val(),
                     cta_text:$('#b2sell-blog-cta-text').val(),
                     cta_page:$('#b2sell-blog-cta-page').val(),
@@ -209,27 +213,68 @@ class B2Sell_GPT_Generator {
                 const blogForm = $('#b2sell-blog-form');
                 if(blogForm.length){
                     let blogContent='';
+                    const blogImageInput=$('#b2sell-blog-image-file');
+                    const blogImageIdInput=$('#b2sell-blog-image-id');
+                    const blogImageUrlInput=$('#b2sell-blog-image-url');
+                    if(blogImageInput.length){
+                        blogImageInput.on('change',function(){
+                            if(blogImageIdInput.length){blogImageIdInput.val('');}
+                            if(blogImageUrlInput.length){blogImageUrlInput.val('');}
+                        });
+                    }
                     blogForm.on('submit',function(e){
                         e.preventDefault();
-                        const data={action:'b2sell_gpt_generate_blog',_wpnonce:b2sellBlogNonce,post_topic:$('#b2sell-blog-post-topic').val(),keywords:$('#b2sell-blog-keywords').val(),word_count:$('#b2sell-blog-word-count').val(),image_url:$('#b2sell-blog-image-url').val(),cta_text:$('#b2sell-blog-cta-text').val(),cta_page:$('#b2sell-blog-cta-page').val()};
                         const preview=$('#blog-preview');
+                        const hasExistingImage=blogImageIdInput.length && blogImageIdInput.val();
+                        const hasNewImage=blogImageInput.length && blogImageInput[0] && blogImageInput[0].files && blogImageInput[0].files.length;
+                        if(!hasExistingImage && !hasNewImage){
+                            preview.show().html('<div class="crear-blog-preview__error">Debes subir una imagen destacada.</div>');
+                            preview.find('.crear-blog-feedback').remove();
+                            return;
+                        }
+                        const formData=new FormData(blogForm[0]);
+                        formData.append('action','b2sell_gpt_generate_blog');
+                        formData.append('_wpnonce',b2sellBlogNonce);
+                        if(hasExistingImage && !hasNewImage){
+                            formData.set('image_id',blogImageIdInput.val());
+                            if(blogImageUrlInput.length){
+                                formData.set('image_url',blogImageUrlInput.val());
+                            }
+                        }
                         preview.show().html('<div class="crear-blog-preview__loading">Generando contenido...</div>');
                         preview.find('.crear-blog-feedback').remove();
-                        $.post(ajaxurl,data,function(res){
-                            if(res.success){
-                                blogContent=res.data.content;
-                                let html='<div class="crear-blog-preview__header"><h2>Vista previa del blog</h2></div>';
-                                html+='<div class="crear-blog-preview__content">'+res.data.content+'</div>';
-                                html+='<div class="crear-blog-preview__actions">';
-                                html+='<button type="button" class="crear-blog-secondary-btn" id="b2sell-blog-save-draft">Guardar como borrador</button>';
-                                html+='<button type="button" class="crear-blog-secondary-btn" id="b2sell-blog-publish">Publicar ahora</button>';
-                                html+='<button type="button" class="crear-blog-secondary-btn" id="b2sell-blog-download">Descargar texto</button>';
-                                html+='</div>';
-                                preview.html(html);
-                            }else{
+                        $.ajax({
+                            url:ajaxurl,
+                            type:'POST',
+                            data:formData,
+                            processData:false,
+                            contentType:false,
+                            success:function(res){
+                                if(res.success){
+                                    blogContent=res.data.content;
+                                    if(res.data.image_id && blogImageIdInput.length){
+                                        blogImageIdInput.val(res.data.image_id);
+                                    }
+                                    if(res.data.image_url && blogImageUrlInput.length){
+                                        blogImageUrlInput.val(res.data.image_url);
+                                    }
+                                    let html='<div class="crear-blog-preview__header"><h2>Vista previa del blog</h2></div>';
+                                    html+='<div class="crear-blog-preview__content">'+res.data.content+'</div>';
+                                    html+='<div class="crear-blog-preview__actions">';
+                                    html+='<button type="button" class="crear-blog-secondary-btn" id="b2sell-blog-save-draft">Guardar como borrador</button>';
+                                    html+='<button type="button" class="crear-blog-secondary-btn" id="b2sell-blog-publish">Publicar ahora</button>';
+                                    html+='<button type="button" class="crear-blog-secondary-btn" id="b2sell-blog-download">Descargar texto</button>';
+                                    html+='</div>';
+                                    preview.html(html);
+                                }else{
+                                    blogContent='';
+                                    const msg=res.data && res.data.message ? res.data.message : res.data;
+                                    preview.html('<div class="crear-blog-preview__error">'+msg+'</div>');
+                                }
+                            },
+                            error:function(){
                                 blogContent='';
-                                const msg=res.data && res.data.message ? res.data.message : res.data;
-                                preview.html('<div class="crear-blog-preview__error">'+msg+'</div>');
+                                preview.html('<div class="crear-blog-preview__error">Ocurrió un error al subir la imagen. Intenta nuevamente.</div>');
                             }
                         });
                     });
@@ -352,18 +397,51 @@ class B2Sell_GPT_Generator {
         }
 
         $post_topic = sanitize_textarea_field( wp_unslash( $_POST['post_topic'] ?? '' ) );
-        $keywords  = sanitize_text_field( wp_unslash( $_POST['keywords'] ?? '' ) );
+        $keywords   = sanitize_text_field( wp_unslash( $_POST['keywords'] ?? '' ) );
         $word_count = intval( $_POST['word_count'] ?? 800 );
-        $image_url = esc_url_raw( wp_unslash( $_POST['image_url'] ?? '' ) );
-        $cta_text  = sanitize_text_field( wp_unslash( $_POST['cta_text'] ?? '' ) );
-        $cta_page  = intval( $_POST['cta_page'] ?? 0 );
+        $image_id   = intval( $_POST['image_id'] ?? 0 );
+        $image_url  = esc_url_raw( wp_unslash( $_POST['image_url'] ?? '' ) );
+        $cta_text   = sanitize_text_field( wp_unslash( $_POST['cta_text'] ?? '' ) );
+        $cta_page   = intval( $_POST['cta_page'] ?? 0 );
+
+        if ( $image_id ) {
+            $stored_url = wp_get_attachment_url( $image_id );
+            if ( $stored_url ) {
+                $image_url = $stored_url;
+            } else {
+                $image_id  = 0;
+                $image_url = '';
+            }
+        }
+
+        if ( ! empty( $_FILES['image_file']['name'] ?? '' ) ) {
+            if ( ! current_user_can( 'upload_files' ) ) {
+                wp_send_json_error( array( 'message' => 'No tienes permisos para subir archivos.' ) );
+            }
+
+            require_once ABSPATH . 'wp-admin/includes/media.php';
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            require_once ABSPATH . 'wp-admin/includes/image.php';
+
+            $uploaded_id = media_handle_upload( 'image_file', 0 );
+
+            if ( is_wp_error( $uploaded_id ) ) {
+                wp_send_json_error( array( 'message' => $uploaded_id->get_error_message() ) );
+            }
+
+            $image_id  = $uploaded_id;
+            $image_url = wp_get_attachment_url( $image_id );
+            if ( ! $image_url ) {
+                wp_send_json_error( array( 'message' => 'No se pudo procesar la imagen subida.' ) );
+            }
+        }
 
         $post_topic = mb_substr( $post_topic, 0, 500 );
         $keywords   = mb_substr( $keywords, 0, 500 );
         $word_count = max( 100, min( $word_count, 3000 ) );
         $cta_text   = mb_substr( $cta_text, 0, 200 );
 
-        if ( empty( $post_topic ) || empty( $keywords ) || empty( $image_url ) || empty( $cta_text ) || ! $cta_page ) {
+        if ( empty( $post_topic ) || empty( $keywords ) || empty( $cta_text ) || ! $cta_page || ( ! $image_url && ! $image_id ) ) {
             wp_send_json_error( array( 'message' => 'Todos los campos son obligatorios.' ) );
         }
 
@@ -379,7 +457,9 @@ class B2Sell_GPT_Generator {
         $prompt .= "Estructura:\n\n";
         $prompt .= "<H1> con la keyword principal\n";
         $prompt .= "Opening persuasivo de 2–3 frases que incluya la keyword\n";
-        $prompt .= 'Imagen de referencia ' . $image_url . "\n";
+        if ( $image_url ) {
+            $prompt .= 'Imagen de referencia ' . $image_url . "\n";
+        }
         $prompt .= "<H2> con una keyword secundaria\n";
         $prompt .= "Contenido en párrafo coherente\n";
         $prompt .= "<H2> con otra variación de keyword\n";
@@ -394,7 +474,13 @@ class B2Sell_GPT_Generator {
 
         $content = wp_kses_post( $result['content'] );
 
-        wp_send_json_success( array( 'content' => $content ) );
+        wp_send_json_success(
+            array(
+                'content'   => $content,
+                'image_id'  => $image_id,
+                'image_url' => $image_url,
+            )
+        );
     }
 
     public function ajax_crear_blog_seo() {
@@ -477,8 +563,23 @@ class B2Sell_GPT_Generator {
             update_post_meta( $post_id, '_seo_post_topic', $post_topic );
         }
 
+        $image_id  = intval( $_POST['image_id'] ?? 0 );
         $image_url = esc_url_raw( wp_unslash( $_POST['image_url'] ?? '' ) );
-        if ( $image_url ) {
+
+        if ( $image_id ) {
+            $attachment = get_post( $image_id );
+            if ( $attachment && 'attachment' === $attachment->post_type ) {
+                set_post_thumbnail( $post_id, $image_id );
+                if ( 0 === intval( $attachment->post_parent ) ) {
+                    wp_update_post(
+                        array(
+                            'ID'          => $image_id,
+                            'post_parent' => $post_id,
+                        )
+                    );
+                }
+            }
+        } elseif ( $image_url ) {
             require_once ABSPATH . 'wp-admin/includes/media.php';
             require_once ABSPATH . 'wp-admin/includes/file.php';
             require_once ABSPATH . 'wp-admin/includes/image.php';
