@@ -90,13 +90,27 @@ class B2Sell_Competencia {
         if ( ! $row ) {
             return null;
         }
-        $meta_data        = json_decode( $row->keywords, true );
+        $meta_data         = json_decode( $row->keywords, true );
         $available_results = 0;
+        $volume            = 0;
         if ( is_array( $meta_data ) ) {
             if ( isset( $meta_data['result_count'] ) ) {
                 $available_results = intval( $meta_data['result_count'] );
             } elseif ( $this->is_sequential_array( $meta_data ) ) {
                 $available_results = 50; // Compatibilidad con registros antiguos.
+            }
+            if ( isset( $meta_data['volumes'] ) && is_array( $meta_data['volumes'] ) ) {
+                if ( isset( $meta_data['volumes'][ $keyword ] ) ) {
+                    $volume = (int) $meta_data['volumes'][ $keyword ];
+                } else {
+                    $keyword_lower = strtolower( $keyword );
+                    foreach ( $meta_data['volumes'] as $stored_keyword => $stored_volume ) {
+                        if ( strtolower( (string) $stored_keyword ) === $keyword_lower ) {
+                            $volume = (int) $stored_volume;
+                            break;
+                        }
+                    }
+                }
             }
         }
         if ( $available_results && $available_results < $result_count ) {
@@ -125,12 +139,13 @@ class B2Sell_Competencia {
         return array(
             'mine'        => (int) $row->my_rank,
             'competitors' => $comp_ranks,
+            'volume'      => $volume,
         );
     }
 
     private function ctr_from_rank( $rank ) {
         if ( 1 === $rank ) {
-            return 0.27;
+            return 0.28;
         }
         if ( 2 === $rank ) {
             return 0.15;
@@ -138,14 +153,17 @@ class B2Sell_Competencia {
         if ( 3 === $rank ) {
             return 0.10;
         }
-        if ( in_array( $rank, array( 4, 5 ), true ) ) {
-            return 0.06;
+        if ( 4 === $rank ) {
+            return 0.07;
         }
-        if ( in_array( $rank, array( 6, 7 ), true ) ) {
-            return 0.04;
+        if ( 5 === $rank ) {
+            return 0.05;
         }
-        if ( $rank >= 8 && $rank <= 10 ) {
-            return 0.02;
+        if ( $rank >= 6 && $rank <= 10 ) {
+            return 0.03;
+        }
+        if ( $rank >= 11 && $rank <= 20 ) {
+            return 0.01;
         }
         return 0;
     }
@@ -279,6 +297,58 @@ class B2Sell_Competencia {
         return $data;
     }
 
+    public function get_visibility_history( $limit = 50 ) {
+        global $wpdb;
+        $limit     = max( 0, (int) $limit );
+        $raw_limit = $limit ? $limit * 10 : 200;
+        if ( $raw_limit <= 0 ) {
+            $raw_limit = 200;
+        }
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT date,keywords FROM {$this->table} ORDER BY date DESC LIMIT %d",
+                $raw_limit
+            )
+        );
+        $history = array();
+        foreach ( $rows as $row ) {
+            if ( isset( $history[ $row->date ] ) ) {
+                continue;
+            }
+            $meta = json_decode( $row->keywords, true );
+            if ( ! is_array( $meta ) ) {
+                continue;
+            }
+            $visibility_meta = $meta['visibility'] ?? array();
+            if ( isset( $visibility_meta['normalized'] ) && is_array( $visibility_meta['normalized'] ) ) {
+                $visibility = $visibility_meta['normalized'];
+            } elseif ( is_array( $visibility_meta ) ) {
+                $visibility = $visibility_meta;
+            } else {
+                continue;
+            }
+            if ( empty( $visibility ) ) {
+                continue;
+            }
+            $history[ $row->date ] = array(
+                'date'       => $row->date,
+                'visibility' => array_map(
+                    static function ( $value ) {
+                        return is_numeric( $value ) ? (float) $value : 0.0;
+                    },
+                    $visibility
+                ),
+            );
+        }
+        if ( $history ) {
+            ksort( $history );
+            if ( $limit > 0 && count( $history ) > $limit ) {
+                $history = array_slice( $history, -$limit, null, true );
+            }
+        }
+        return array_values( $history );
+    }
+
     public function render_admin_page() {
         $posts = get_posts( array(
             'post_type'   => array( 'post', 'page' ),
@@ -305,6 +375,11 @@ class B2Sell_Competencia {
         $competitors = get_option( 'b2sell_comp_domains', array() );
         global $wpdb;
         $history = $wpdb->get_results( "SELECT * FROM {$this->table} ORDER BY date DESC LIMIT 20" );
+        $vis_history      = $this->get_visibility_history();
+        $vis_history_json = wp_json_encode( $vis_history );
+        if ( false === $vis_history_json ) {
+            $vis_history_json = '[]';
+        }
         echo '<div class="wrap">';
         if ( ( 'google' === $provider && ( ! $api_key || ! $cx ) ) || ( 'serpapi' === $provider && ! $serpapi_key ) ) {
             $link = esc_url( admin_url( 'admin.php?page=b2sell-seo-config' ) );
@@ -349,6 +424,16 @@ class B2Sell_Competencia {
             echo '<tr><td colspan="4">Sin análisis previos.</td></tr>';
         }
         echo '</tbody></table>';
+        echo '<div id="b2sell_comp_visibility_history_container" style="margin-top:20px;">';
+        echo '<h3>Índice de visibilidad en el tiempo</h3>';
+        if ( $vis_history ) {
+            echo '<canvas id="b2sell_comp_visibility_history_chart" height="120"></canvas>';
+            echo '<p id="b2sell_comp_visibility_history_empty" style="display:none;">Sin datos de visibilidad.</p>';
+        } else {
+            echo '<canvas id="b2sell_comp_visibility_history_chart" height="120" style="display:none;"></canvas>';
+            echo '<p id="b2sell_comp_visibility_history_empty">Sin datos de visibilidad.</p>';
+        }
+        echo '</div>';
         echo '</div>';
 
         echo '</div>';
@@ -361,7 +446,8 @@ class B2Sell_Competencia {
 
         echo '<div id="b2sell_comp_hist_modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);">';
         echo '<div style="background:#fff;padding:20px;max-width:800px;margin:50px auto;"><div id="b2sell_comp_hist_modal_content"></div><button class="button" id="b2sell_comp_hist_close">Cerrar</button></div></div>';
-        echo '<script>var b2sellCompNonce="' . esc_js( $nonce ) . '",b2sellCompProvider="' . esc_js( $provider ) . '";</script>';
+        echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
+        echo '<script>var b2sellCompNonce="' . esc_js( $nonce ) . '",b2sellCompProvider="' . esc_js( $provider ) . '",b2sellCompVisibilityHistory=' . $vis_history_json . ';</script>';
         echo '<script>
         jQuery(function($){
             $(".nav-tab-wrapper .nav-tab").on("click",function(e){e.preventDefault();var t=$(this).data("tab");$(".nav-tab").removeClass("nav-tab-active");$(this).addClass("nav-tab-active");$(".b2sell-comp-tab").hide();$("#b2sell_comp_tab_"+t).show();});
@@ -392,6 +478,72 @@ class B2Sell_Competencia {
             $("#b2sell_comp_keywords").on("input",updateNotice);
             $("#b2sell_comp_result_count").on("change",updateNotice);
             updateNotice();
+            var visColors=["#0073aa","#ff6384","#36a2eb","#ffcd56","#4bc0c0","#9966ff"];
+            var visHistory=Array.isArray(b2sellCompVisibilityHistory)?b2sellCompVisibilityHistory.slice():[];
+            function renderVisibilityChart(vis){
+                var canvas=document.getElementById("b2sell_comp_visibility_chart");
+                var valuesWrap=$("#b2sell_comp_visibility_values");
+                if(!canvas||typeof Chart==="undefined"){
+                    if(valuesWrap.length){valuesWrap.empty();}
+                    return;
+                }
+                var normalized=vis&&vis.normalized?vis.normalized:{};
+                var labels=Object.keys(normalized);
+                if(!labels.length){
+                    if(valuesWrap.length){valuesWrap.empty();}
+                    if(window.b2sellCompVisibilityChart){window.b2sellCompVisibilityChart.destroy();}
+                    return;
+                }
+                var colors=labels.map(function(_,idx){return visColors[idx%visColors.length];});
+                var values=labels.map(function(label){return parseFloat(normalized[label]||0);});
+                if(window.b2sellCompVisibilityChart){window.b2sellCompVisibilityChart.destroy();}
+                window.b2sellCompVisibilityChart=new Chart(canvas.getContext("2d"),{type:"bar",data:{labels:labels,datasets:[{data:values,backgroundColor:colors}]},options:{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});
+                if(valuesWrap.length){
+                    var valuesHtml="";
+                    labels.forEach(function(label,index){
+                        var val=values[index];
+                        valuesHtml+="<div style=\"flex:1;text-align:center;\"><strong>"+label+"</strong><div>"+val.toFixed(1)+"</div></div>";
+                    });
+                    valuesWrap.html(valuesHtml);
+                }
+            }
+            function sortHistory(){
+                visHistory.sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+            }
+            function renderVisibilityHistoryChart(){
+                var canvas=document.getElementById("b2sell_comp_visibility_history_chart");
+                var empty=document.getElementById("b2sell_comp_visibility_history_empty");
+                if(!canvas||typeof Chart==="undefined"){
+                    return;
+                }
+                if(!visHistory.length){
+                    if(empty){empty.style.display="block";}
+                    canvas.style.display="none";
+                    if(window.b2sellCompVisHistoryChart){window.b2sellCompVisHistoryChart.destroy();}
+                    return;
+                }
+                sortHistory();
+                if(empty){empty.style.display="none";}
+                canvas.style.display="block";
+                var ctx=canvas.getContext("2d");
+                var labels=visHistory.map(function(item){return item.date;});
+                var domainMap={};
+                visHistory.forEach(function(item){
+                    if(item.visibility){
+                        Object.keys(item.visibility).forEach(function(dom){domainMap[dom]=true;});
+                    }
+                });
+                var domains=Object.keys(domainMap);
+                if(!domains.length){
+                    return;
+                }
+                var datasets=domains.map(function(dom,idx){
+                    return {label:dom,data:visHistory.map(function(item){return item.visibility&&typeof item.visibility[dom]!=="undefined"?parseFloat(item.visibility[dom]):null;}),borderColor:visColors[idx%visColors.length],fill:false,tension:0.1};
+                });
+                if(window.b2sellCompVisHistoryChart){window.b2sellCompVisHistoryChart.destroy();}
+                window.b2sellCompVisHistoryChart=new Chart(ctx,{type:"line",data:{labels:labels,datasets:datasets},options:{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:true}}}});
+            }
+            renderVisibilityHistoryChart();
             $("#b2sell_comp_search_btn").on("click", function(){
                 var kws=getKeywords();
                 var doms=$("#b2sell_comp_domains").val().split(/\\n+/)
@@ -405,7 +557,7 @@ class B2Sell_Competencia {
                     if(res.success){
                         var data=res.data;
                         var comps=data.competitors;
-                        var html="<table class=\\"widefat\\"><thead><tr><th>Keyword</th><th>"+data.domain+"</th>";
+                        var html="<div class=\\\"b2sell-comp-table\\\"><table class=\\\"widefat\\\"><thead><tr><th>Keyword</th><th>"+data.domain+"</th>";
                         comps.forEach(function(c){html+="<th>"+c+"</th>";});
                         html+="</tr></thead><tbody>";
                         kws.forEach(function(kw){
@@ -414,10 +566,22 @@ class B2Sell_Competencia {
                             comps.forEach(function(c){var r=row.competitors&&row.competitors[c]?row.competitors[c]:"-";html+="<td>"+r+"</td>";});
                             html+="</tr>";
                         });
-                        html+="</tbody></table>";
+                        html+="</tbody></table></div>";
+                        html+="<div id=\\\"b2sell_comp_visibility_container\\\" style=\\\"margin-top:30px;\\\">";
+                        html+="<h3>Índice de visibilidad</h3>";
+                        html+="<canvas id=\\\"b2sell_comp_visibility_chart\\\" height=\\\"140\\\"></canvas>";
+                        html+="<div id=\\\"b2sell_comp_visibility_values\\\" style=\\\"display:flex;justify-content:space-around;margin-top:10px;\\\"></div>";
+                        html+="</div>";
                         $("#b2sell_comp_results").html(html);
+                        renderVisibilityChart(data.visibility);
+                        if(data.history_entry&&data.history_entry.date){
+                            var updated=false;
+                            visHistory=visHistory.map(function(item){if(item.date===data.history_entry.date){updated=true;return data.history_entry;}return item;});
+                            if(!updated){visHistory.push(data.history_entry);}
+                            renderVisibilityHistoryChart();
+                        }
                     }else{
-                        $("#b2sell_comp_results").html("<div class=\\"error\\"><p>"+res.data+"</p></div>");
+                        $("#b2sell_comp_results").html("<div class=\\\"error\\\"><p>"+res.data+"</p></div>");
                     }
                 },"json");
             });
@@ -452,13 +616,50 @@ class B2Sell_Competencia {
             wp_send_json_error( 'Proveedor de datos no configurado correctamente. Revisa la configuración.' );
         }
         $domain      = parse_url( home_url(), PHP_URL_HOST );
-        $results     = array();
         $now         = current_time( 'mysql' );
+        $analysis_date = $now;
         $query_plan  = $this->build_query_plan( $provider, $result_count );
+        $volumes_data = $this->get_keyword_volumes( $keywords );
+        $results     = array();
+        $volumes_map = array();
+        $visibility_domains = array_values( array_unique( array_merge( array( $domain ), $competitors ) ) );
+        $visibility_totals  = array();
+        foreach ( $visibility_domains as $vis_domain ) {
+            $visibility_totals[ $vis_domain ] = 0;
+        }
+        $insert_ids = array();
+        global $wpdb;
         foreach ( $keywords as $keyword ) {
+            $volume = isset( $volumes_data[ $keyword ] ) ? (int) $volumes_data[ $keyword ] : 0;
+            if ( ! $volume && ! empty( $volumes_data ) ) {
+                $keyword_lower = strtolower( $keyword );
+                foreach ( $volumes_data as $stored_keyword => $stored_volume ) {
+                    if ( strtolower( (string) $stored_keyword ) === $keyword_lower ) {
+                        $volume = (int) $stored_volume;
+                        break;
+                    }
+                }
+            }
             $cached = $this->maybe_get_cached_analysis( $keyword, $provider, $result_count, $competitors, $now );
             if ( $cached ) {
-                $results[ $keyword ] = $cached;
+                $cached_volume = isset( $cached['volume'] ) ? (int) $cached['volume'] : 0;
+                if ( $cached_volume > 0 ) {
+                    $volume = $cached_volume;
+                }
+                $volumes_map[ $keyword ] = $volume;
+                $results[ $keyword ]     = array(
+                    'mine'        => $cached['mine'],
+                    'competitors' => $cached['competitors'],
+                    'volume'      => $volume,
+                );
+                $visibility_totals[ $domain ] += $volume * $this->ctr_from_rank( (int) $cached['mine'] );
+                foreach ( $competitors as $c_domain ) {
+                    if ( ! isset( $visibility_totals[ $c_domain ] ) ) {
+                        $visibility_totals[ $c_domain ] = 0;
+                    }
+                    $rank = $cached['competitors'][ $c_domain ] ?? 0;
+                    $visibility_totals[ $c_domain ] += $volume * $this->ctr_from_rank( (int) $rank );
+                }
                 continue;
             }
             $my_rank    = 0;
@@ -534,32 +735,98 @@ class B2Sell_Competencia {
             $results[ $keyword ] = array(
                 'mine'        => $my_rank,
                 'competitors' => $comp_ranks,
+                'volume'      => $volume,
             );
+            $volumes_map[ $keyword ] = $volume;
+            $visibility_totals[ $domain ] += $volume * $this->ctr_from_rank( (int) $my_rank );
+            foreach ( $competitors as $c_domain ) {
+                if ( ! isset( $visibility_totals[ $c_domain ] ) ) {
+                    $visibility_totals[ $c_domain ] = 0;
+                }
+                $visibility_totals[ $c_domain ] += $volume * $this->ctr_from_rank( (int) ( $comp_ranks[ $c_domain ] ?? 0 ) );
+            }
             $store = array();
             foreach ( $comp_ranks as $cd => $r ) {
                 $store[] = array( 'domain' => $cd, 'rank' => $r );
             }
-            global $wpdb;
-            $wpdb->insert( $this->table, array(
-                'date'     => current_time( 'mysql' ),
-                'keyword'  => $keyword,
-                'keywords' => wp_json_encode(
-                    array(
-                        'keywords'     => $keywords,
-                        'result_count' => $result_count,
-                    )
-                ),
-                'post_id'  => 0,
-                'results'  => wp_json_encode( $store ),
-                'my_rank'  => $my_rank,
-                'provider' => $provider,
-            ) );
+            $wpdb->insert(
+                $this->table,
+                array(
+                    'date'     => $analysis_date,
+                    'keyword'  => $keyword,
+                    'keywords' => wp_json_encode(
+                        array(
+                            'keywords'     => $keywords,
+                            'result_count' => $result_count,
+                        )
+                    ),
+                    'post_id'  => 0,
+                    'results'  => wp_json_encode( $store ),
+                    'my_rank'  => $my_rank,
+                    'provider' => $provider,
+                )
+            );
+            if ( $wpdb->insert_id ) {
+                $insert_ids[] = (int) $wpdb->insert_id;
+            }
         }
-        wp_send_json_success( array(
+        $raw_visibility = array();
+        $max_visibility = 0.0;
+        foreach ( $visibility_domains as $vis_domain ) {
+            $value = isset( $visibility_totals[ $vis_domain ] ) ? (float) $visibility_totals[ $vis_domain ] : 0.0;
+            $raw_visibility[ $vis_domain ] = round( $value, 2 );
+            if ( $value > $max_visibility ) {
+                $max_visibility = $value;
+            }
+        }
+        $normalized_visibility = array();
+        foreach ( $visibility_domains as $vis_domain ) {
+            if ( $max_visibility > 0 ) {
+                $normalized_visibility[ $vis_domain ] = round( ( $visibility_totals[ $vis_domain ] / $max_visibility ) * 100, 2 );
+            } else {
+                $normalized_visibility[ $vis_domain ] = 0.0;
+            }
+        }
+        if ( $insert_ids ) {
+            $meta_template = array(
+                'keywords'     => $keywords,
+                'result_count' => $result_count,
+                'volumes'      => $volumes_map,
+                'visibility'   => array(
+                    'normalized' => $normalized_visibility,
+                    'raw'        => $raw_visibility,
+                ),
+            );
+            $meta_json = wp_json_encode( $meta_template );
+            if ( false !== $meta_json ) {
+                foreach ( $insert_ids as $insert_id ) {
+                    $wpdb->update(
+                        $this->table,
+                        array( 'keywords' => $meta_json ),
+                        array( 'id' => $insert_id ),
+                        array( '%s' ),
+                        array( '%d' )
+                    );
+                }
+            }
+        }
+        $response = array(
             'domain'      => $domain,
             'competitors' => $competitors,
             'results'     => $results,
-        ) );
+            'visibility'  => array(
+                'raw'        => $raw_visibility,
+                'normalized' => $normalized_visibility,
+            ),
+            'volumes'     => $volumes_map,
+        );
+        if ( $insert_ids ) {
+            $response['history_entry'] = array(
+                'date'       => $analysis_date,
+                'visibility' => $normalized_visibility,
+            );
+        }
+        wp_send_json_success( $response );
     }
     public function ajax_history_detail() {
         check_ajax_referer( 'b2sell_competencia_nonce' );
