@@ -349,6 +349,84 @@ class B2Sell_Competencia {
         return array_values( $history );
     }
 
+    private function calculate_position_changes( $keywords, $provider, $results ) {
+        global $wpdb;
+        $summary = array(
+            'up'    => 0,
+            'down'  => 0,
+            'equal' => 0,
+        );
+        $items = array();
+        if ( empty( $keywords ) ) {
+            return array(
+                'summary' => $summary,
+                'items'   => $items,
+            );
+        }
+        foreach ( $keywords as $keyword ) {
+            $keyword = (string) $keyword;
+            if ( '' === $keyword ) {
+                continue;
+            }
+            $current_rank = isset( $results[ $keyword ]['mine'] ) ? (int) $results[ $keyword ]['mine'] : 0;
+            $rows         = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT my_rank FROM {$this->table} WHERE keyword=%s AND provider=%s ORDER BY date DESC LIMIT 2",
+                    $keyword,
+                    $provider
+                )
+            );
+            $previous_rank = null;
+            if ( $rows ) {
+                $latest_rank = isset( $rows[0] ) ? (int) $rows[0]->my_rank : 0;
+                if ( 0 === $current_rank && $latest_rank > 0 ) {
+                    $current_rank = $latest_rank;
+                }
+                if ( isset( $rows[1] ) ) {
+                    $previous_rank = (int) $rows[1]->my_rank;
+                }
+            }
+            $direction    = 'equal';
+            $change_label = '=';
+            if ( null !== $previous_rank ) {
+                if ( $current_rank > 0 && $previous_rank > 0 ) {
+                    $delta = $previous_rank - $current_rank;
+                    if ( $delta > 0 ) {
+                        $direction    = 'up';
+                        $change_label = '+' . $delta;
+                    } elseif ( $delta < 0 ) {
+                        $direction    = 'down';
+                        $change_label = (string) $delta;
+                    }
+                } elseif ( $previous_rank > 0 && $current_rank <= 0 ) {
+                    $direction    = 'down';
+                    $change_label = 'Perdido';
+                } elseif ( $previous_rank <= 0 && $current_rank > 0 ) {
+                    $direction    = 'up';
+                    $change_label = 'Nuevo';
+                }
+            }
+            if ( 'up' === $direction ) {
+                $summary['up']++;
+            } elseif ( 'down' === $direction ) {
+                $summary['down']++;
+            } else {
+                $summary['equal']++;
+            }
+            $items[] = array(
+                'keyword'      => $keyword,
+                'previous'     => $previous_rank,
+                'current'      => $current_rank,
+                'direction'    => $direction,
+                'change_label' => $change_label,
+            );
+        }
+        return array(
+            'summary' => $summary,
+            'items'   => $items,
+        );
+    }
+
     public function render_admin_page() {
         $posts = get_posts( array(
             'post_type'   => array( 'post', 'page' ),
@@ -665,6 +743,37 @@ class B2Sell_Competencia {
                     if(res.success){
                         var data=res.data;
                         var comps=data.competitors;
+                        if(!document.getElementById("b2sell_comp_growth_styles")){
+                            var styleContent=[
+                                ".b2sell-comp-growth{margin-top:30px;background:linear-gradient(180deg,#ffffff 0%,#f9fafb 100%);border-radius:16px;padding:24px;box-shadow:0 20px 45px rgba(15,23,42,0.08);}",
+                                ".b2sell-comp-growth h3{margin:0 0 16px;font-size:20px;color:#0f172a;font-weight:600;}",
+                                ".b2sell-comp-growth-summary{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;}",
+                                ".b2sell-comp-growth-summary .summary-card{flex:1;min-width:180px;background:rgba(255,255,255,0.92);border-radius:12px;padding:16px;box-shadow:inset 0 0 0 1px rgba(15,23,42,0.05);display:flex;flex-direction:column;gap:8px;}",
+                                ".summary-card.summary-card-up{border-left:4px solid #22c55e;}",
+                                ".summary-card.summary-card-down{border-left:4px solid #ef4444;}",
+                                ".summary-card.summary-card-equal{border-left:4px solid #9ca3af;}",
+                                ".summary-card .summary-label{font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280;}",
+                                ".summary-card .summary-value{font-size:28px;font-weight:700;color:#111827;}",
+                                ".b2sell-comp-growth-table{background:#ffffff;border-radius:12px;padding:16px;box-shadow:inset 0 0 0 1px rgba(15,23,42,0.04);overflow-x:auto;}",
+                                ".b2sell-comp-growth-table table{margin-top:12px;border-radius:10px;overflow:hidden;width:100%;}",
+                                ".b2sell-comp-growth-table th{background:#f3f4f6;font-weight:600;color:#111827;}",
+                                ".b2sell-comp-growth-table td{color:#1f2937;}",
+                                ".b2sell-comp-growth-empty{margin:20px 0 0;color:#6b7280;text-align:center;}",
+                                ".b2sell-change{display:inline-flex;align-items:center;gap:6px;font-weight:600;border-radius:999px;padding:6px 12px;font-size:14px;}",
+                                ".b2sell-change-up{background:rgba(34,197,94,0.15);color:#047857;}",
+                                ".b2sell-change-down{background:rgba(239,68,68,0.18);color:#b91c1c;}",
+                                ".b2sell-change-equal{background:rgba(156,163,175,0.18);color:#374151;}",
+                                ".b2sell-change .dashicons{font-size:16px;height:16px;width:16px;line-height:16px;}",
+                                ".b2sell-growth-table tbody tr:nth-child(even){background:rgba(249,250,251,0.7);}",
+                                ".b2sell-growth-table tbody tr:hover{background:rgba(191,219,254,0.35);}",
+                                "@media (max-width:900px){.b2sell-comp-growth-summary{flex-direction:column;}.b2sell-comp-growth{padding:20px;}.b2sell-comp-growth-table{padding:12px;}}"
+                            ].join("");
+                            var styleTag=document.createElement("style");
+                            styleTag.id="b2sell_comp_growth_styles";
+                            styleTag.appendChild(document.createTextNode(styleContent));
+                            document.head.appendChild(styleTag);
+                        }
+                        var formatPosition=function(value){return value&&value>0?value:"—";};
                         var html="<div class=\\\"b2sell-comp-table\\\"><table class=\\\"widefat\\\"><thead><tr><th>Keyword</th><th>"+data.domain+"</th>";
                         comps.forEach(function(c){html+="<th>"+c+"</th>";});
                         html+="</tr></thead><tbody>";
@@ -675,6 +784,46 @@ class B2Sell_Competencia {
                             html+="</tr>";
                         });
                         html+="</tbody></table></div>";
+                        var summary=data.position_summary||{};
+                        var improved=parseInt(summary.up||0,10);
+                        var worsened=parseInt(summary.down||0,10);
+                        var unchanged=parseInt(summary.equal||0,10);
+                        var changes=Array.isArray(data.position_changes)?data.position_changes:[];
+                        html+="<div class=\\\"b2sell-comp-growth\\\">";
+                        html+="<div class=\\\"b2sell-comp-growth-summary\\\">";
+                        html+="<div class=\\\"summary-card summary-card-up\\\"><span class=\\\"summary-label\\\">Keywords que mejoraron</span><span class=\\\"summary-value\\\">"+improved+"</span></div>";
+                        html+="<div class=\\\"summary-card summary-card-down\\\"><span class=\\\"summary-label\\\">Keywords que empeoraron</span><span class=\\\"summary-value\\\">"+worsened+"</span></div>";
+                        html+="<div class=\\\"summary-card summary-card-equal\\\"><span class=\\\"summary-label\\\">Keywords sin cambios</span><span class=\\\"summary-value\\\">"+unchanged+"</span></div>";
+                        html+="</div>";
+                        html+="<div class=\\\"b2sell-comp-growth-table\\\">";
+                        html+="<h3>Ranking de crecimiento/disminución</h3>";
+                        if(!changes.length){
+                            html+="<p class=\\\"b2sell-comp-growth-empty\\\">Sin datos históricos para mostrar el ranking de crecimiento.</p>";
+                        }else{
+                            html+="<table class=\\\"widefat b2sell-growth-table\\\"><thead><tr><th>Keyword</th><th>Posición anterior</th><th>Posición actual</th><th>Cambio</th></tr></thead><tbody>";
+                            changes.forEach(function(item){
+                                var prev=formatPosition(item.previous);
+                                var curr=formatPosition(item.current);
+                                var direction=item.direction||"equal";
+                                var changeLabel=item.change_label||"=";
+                                var changeClass="b2sell-change-equal";
+                                var icon="<span class=\\\"dashicons dashicons-minus\\\"></span>";
+                                if(direction==="up"){
+                                    changeClass="b2sell-change-up";
+                                    icon="<span class=\\\"dashicons dashicons-arrow-up-alt\\\"></span>";
+                                    if(!changeLabel){changeLabel="Mejoró";}
+                                }else if(direction==="down"){
+                                    changeClass="b2sell-change-down";
+                                    icon="<span class=\\\"dashicons dashicons-arrow-down-alt\\\"></span>";
+                                    if(!changeLabel){changeLabel="Peor";}
+                                }else if(!changeLabel){
+                                    changeLabel="=";
+                                }
+                                html+="<tr><td>"+item.keyword+"</td><td>"+prev+"</td><td>"+curr+"</td><td><span class=\\\"b2sell-change "+changeClass+"\\\">"+icon+"<span>"+changeLabel+"</span></span></td></tr>";
+                            });
+                            html+="</tbody></table>";
+                        }
+                        html+="</div></div>";
                         html+="<div id=\\\"b2sell_comp_visibility_container\\\" style=\\\"margin-top:30px;\\\">";
                         html+="<h3>Índice de visibilidad</h3>";
                         html+="<canvas id=\\\"b2sell_comp_visibility_chart\\\" height=\\\"140\\\"></canvas>";
@@ -944,6 +1093,9 @@ class B2Sell_Competencia {
                 'visibility' => $normalized_visibility,
             );
         }
+        $changes = $this->calculate_position_changes( $keywords, $provider, $results );
+        $response['position_changes'] = $changes['items'];
+        $response['position_summary'] = $changes['summary'];
         wp_send_json_success( $response );
     }
     public function ajax_history_detail() {
