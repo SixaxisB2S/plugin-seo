@@ -373,6 +373,8 @@ class B2Sell_Competencia {
         $serpapi_key = get_option( 'b2sell_serpapi_key', '' );
         $provider    = get_option( 'b2sell_comp_provider', 'google' );
         $competitors = get_option( 'b2sell_comp_domains', array() );
+        $site_domain = parse_url( home_url(), PHP_URL_HOST );
+        $site_domain = $site_domain ? $site_domain : '';
         global $wpdb;
         $history = $wpdb->get_results( "SELECT * FROM {$this->table} ORDER BY date DESC LIMIT 20" );
         $vis_history      = $this->get_visibility_history();
@@ -424,15 +426,15 @@ class B2Sell_Competencia {
             echo '<tr><td colspan="4">Sin análisis previos.</td></tr>';
         }
         echo '</tbody></table>';
+        $history_has_data    = ! empty( $vis_history );
+        $history_wrapper_css = $history_has_data ? '' : 'display:none;';
+        $history_empty_css   = $history_has_data ? 'display:none;' : '';
         echo '<div id="b2sell_comp_visibility_history_container" style="margin-top:20px;">';
         echo '<h3>Índice de visibilidad en el tiempo</h3>';
-        if ( $vis_history ) {
-            echo '<canvas id="b2sell_comp_visibility_history_chart" height="120"></canvas>';
-            echo '<p id="b2sell_comp_visibility_history_empty" style="display:none;">Sin datos de visibilidad.</p>';
-        } else {
-            echo '<canvas id="b2sell_comp_visibility_history_chart" height="120" style="display:none;"></canvas>';
-            echo '<p id="b2sell_comp_visibility_history_empty">Sin datos de visibilidad.</p>';
-        }
+        echo '<div class="b2sell-comp-chart-wrapper" style="position:relative;height:260px;' . $history_wrapper_css . '">';
+        echo '<canvas id="b2sell_comp_visibility_history_chart" style="width:100%;height:100%;"></canvas>';
+        echo '</div>';
+        echo '<p id="b2sell_comp_visibility_history_empty" style="margin-top:10px;' . $history_empty_css . '">Sin datos de visibilidad.</p>';
         echo '</div>';
         echo '</div>';
 
@@ -447,7 +449,7 @@ class B2Sell_Competencia {
         echo '<div id="b2sell_comp_hist_modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);">';
         echo '<div style="background:#fff;padding:20px;max-width:800px;margin:50px auto;"><div id="b2sell_comp_hist_modal_content"></div><button class="button" id="b2sell_comp_hist_close">Cerrar</button></div></div>';
         echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
-        echo '<script>var b2sellCompNonce="' . esc_js( $nonce ) . '",b2sellCompProvider="' . esc_js( $provider ) . '",b2sellCompVisibilityHistory=' . $vis_history_json . ';</script>';
+        echo '<script>var b2sellCompNonce="' . esc_js( $nonce ) . '",b2sellCompProvider="' . esc_js( $provider ) . '",b2sellCompVisibilityHistory=' . $vis_history_json . ',b2sellCompPrimaryDomain="' . esc_js( $site_domain ) . '";</script>';
         echo '<script>
         jQuery(function($){
             $(".nav-tab-wrapper .nav-tab").on("click",function(e){e.preventDefault();var t=$(this).data("tab");$(".nav-tab").removeClass("nav-tab-active");$(this).addClass("nav-tab-active");$(".b2sell-comp-tab").hide();$("#b2sell_comp_tab_"+t).show();});
@@ -479,7 +481,41 @@ class B2Sell_Competencia {
             $("#b2sell_comp_result_count").on("change",updateNotice);
             updateNotice();
             var visColors=["#0073aa","#ff6384","#36a2eb","#ffcd56","#4bc0c0","#9966ff"];
+            var visPrimaryColor=visColors[0]||"#0073aa";
+            var defaultAltColors=["#ff6384","#36a2eb","#ffcd56","#4bc0c0","#9966ff","#c9cbcf"];
+            var visAltColors=visColors.length>1?visColors.slice(1).concat(defaultAltColors):defaultAltColors;
+            var visHistoryCharts={};
             var visHistory=Array.isArray(b2sellCompVisibilityHistory)?b2sellCompVisibilityHistory.slice():[];
+            function orderDomains(domains,primary){
+                var list=domains.slice();
+                list.sort(function(a,b){
+                    if(primary){
+                        if(a===primary){return -1;}
+                        if(b===primary){return 1;}
+                    }
+                    return a.localeCompare(b);
+                });
+                return list;
+            }
+            function getColorsForDomains(domains,primary){
+                var colors=[];
+                var altIndex=0;
+                domains.forEach(function(dom){
+                    if(primary&&dom===primary){
+                        colors.push(visPrimaryColor);
+                    }else{
+                        colors.push(visAltColors[altIndex%visAltColors.length]);
+                        altIndex++;
+                    }
+                });
+                return colors;
+            }
+            function destroyHistoryChart(id){
+                if(visHistoryCharts[id]){
+                    visHistoryCharts[id].destroy();
+                    delete visHistoryCharts[id];
+                }
+            }
             function renderVisibilityChart(vis){
                 var canvas=document.getElementById("b2sell_comp_visibility_chart");
                 var valuesWrap=$("#b2sell_comp_visibility_values");
@@ -488,16 +524,16 @@ class B2Sell_Competencia {
                     return;
                 }
                 var normalized=vis&&vis.normalized?vis.normalized:{};
-                var labels=Object.keys(normalized);
+                var labels=orderDomains(Object.keys(normalized),b2sellCompPrimaryDomain||"");
                 if(!labels.length){
                     if(valuesWrap.length){valuesWrap.empty();}
                     if(window.b2sellCompVisibilityChart){window.b2sellCompVisibilityChart.destroy();}
                     return;
                 }
-                var colors=labels.map(function(_,idx){return visColors[idx%visColors.length];});
+                var colors=getColorsForDomains(labels,b2sellCompPrimaryDomain||"");
                 var values=labels.map(function(label){return parseFloat(normalized[label]||0);});
                 if(window.b2sellCompVisibilityChart){window.b2sellCompVisibilityChart.destroy();}
-                window.b2sellCompVisibilityChart=new Chart(canvas.getContext("2d"),{type:"bar",data:{labels:labels,datasets:[{data:values,backgroundColor:colors}]},options:{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});
+                window.b2sellCompVisibilityChart=new Chart(canvas.getContext("2d"),{type:"bar",data:{labels:labels,datasets:[{data:values,backgroundColor:colors}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});
                 if(valuesWrap.length){
                     var valuesHtml="";
                     labels.forEach(function(label,index){
@@ -510,40 +546,112 @@ class B2Sell_Competencia {
             function sortHistory(){
                 visHistory.sort(function(a,b){return new Date(a.date)-new Date(b.date);});
             }
-            function renderVisibilityHistoryChart(){
-                var canvas=document.getElementById("b2sell_comp_visibility_history_chart");
-                var empty=document.getElementById("b2sell_comp_visibility_history_empty");
+            function renderVisibilityHistoryChart(canvasId,emptyId,primaryDomain){
+                var canvas=document.getElementById(canvasId);
+                var empty=emptyId?document.getElementById(emptyId):null;
                 if(!canvas||typeof Chart==="undefined"){
                     return;
                 }
+                var wrapper=canvas.parentElement;
                 if(!visHistory.length){
                     if(empty){empty.style.display="block";}
+                    if(wrapper){wrapper.style.display="none";}
                     canvas.style.display="none";
-                    if(window.b2sellCompVisHistoryChart){window.b2sellCompVisHistoryChart.destroy();}
+                    destroyHistoryChart(canvasId);
                     return;
                 }
                 sortHistory();
-                if(empty){empty.style.display="none";}
-                canvas.style.display="block";
-                var ctx=canvas.getContext("2d");
-                var labels=visHistory.map(function(item){return item.date;});
+                var historyData=visHistory;
+                var labels=historyData.map(function(item){return item.date?item.date.split(" ")[0]:item.date;});
+                var tooltipDates=historyData.map(function(item){return item.date;});
                 var domainMap={};
-                visHistory.forEach(function(item){
+                historyData.forEach(function(item){
                     if(item.visibility){
                         Object.keys(item.visibility).forEach(function(dom){domainMap[dom]=true;});
                     }
                 });
-                var domains=Object.keys(domainMap);
+                var highlightDomain=primaryDomain||b2sellCompPrimaryDomain||"";
+                var domains=orderDomains(Object.keys(domainMap),highlightDomain);
                 if(!domains.length){
+                    if(empty){empty.style.display="block";}
+                    if(wrapper){wrapper.style.display="none";}
+                    canvas.style.display="none";
+                    destroyHistoryChart(canvasId);
                     return;
                 }
-                var datasets=domains.map(function(dom,idx){
-                    return {label:dom,data:visHistory.map(function(item){return item.visibility&&typeof item.visibility[dom]!=="undefined"?parseFloat(item.visibility[dom]):null;}),borderColor:visColors[idx%visColors.length],fill:false,tension:0.1};
+                if(empty){empty.style.display="none";}
+                if(wrapper){wrapper.style.display="block";}
+                canvas.style.display="block";
+                var altIndex=0;
+                var datasets=domains.map(function(dom){
+                    var isPrimary=highlightDomain&&dom===highlightDomain;
+                    var color;
+                    if(isPrimary){
+                        color=visPrimaryColor;
+                    }else{
+                        color=visAltColors[altIndex%visAltColors.length];
+                        altIndex++;
+                    }
+                    return {
+                        label:dom,
+                        data:historyData.map(function(item){
+                            if(item.visibility&&Object.prototype.hasOwnProperty.call(item.visibility,dom)){
+                                var val=parseFloat(item.visibility[dom]);
+                                if(isNaN(val)){return null;}
+                                if(val>100){val=100;}
+                                if(val<0){val=0;}
+                                return val;
+                            }
+                            return null;
+                        }),
+                        borderColor:color,
+                        backgroundColor:color,
+                        fill:false,
+                        borderWidth:isPrimary?3:2,
+                        pointRadius:isPrimary?4:3,
+                        pointHoverRadius:isPrimary?6:4,
+                        tension:0.3,
+                        spanGaps:true
+                    };
                 });
-                if(window.b2sellCompVisHistoryChart){window.b2sellCompVisHistoryChart.destroy();}
-                window.b2sellCompVisHistoryChart=new Chart(ctx,{type:"line",data:{labels:labels,datasets:datasets},options:{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:true}}}});
+                destroyHistoryChart(canvasId);
+                visHistoryCharts[canvasId]=new Chart(canvas.getContext("2d"),{
+                    type:"line",
+                    data:{labels:labels,datasets:datasets},
+                    options:{
+                        responsive:true,
+                        maintainAspectRatio:false,
+                        interaction:{mode:"index",intersect:false},
+                        scales:{
+                            x:{title:{display:true,text:"Fecha"}},
+                            y:{
+                                beginAtZero:true,
+                                max:100,
+                                title:{display:true,text:"Índice de visibilidad"},
+                                ticks:{callback:function(value){return value+"%";}}
+                            }
+                        },
+                        plugins:{
+                            legend:{display:true,position:"top",labels:{usePointStyle:true}},
+                            tooltip:{
+                                callbacks:{
+                                    title:function(context){
+                                        if(!context.length){return"";}
+                                        var idx=context[0].dataIndex;
+                                        var raw=tooltipDates[idx]||context[0].label;
+                                        return "Fecha: "+raw;
+                                    },
+                                    label:function(context){
+                                        var value=typeof context.parsed.y==="number"?context.parsed.y.toFixed(1):context.formattedValue;
+                                        return context.dataset.label+": "+value+"%";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
             }
-            renderVisibilityHistoryChart();
+            renderVisibilityHistoryChart("b2sell_comp_visibility_history_chart","b2sell_comp_visibility_history_empty",b2sellCompPrimaryDomain);
             $("#b2sell_comp_search_btn").on("click", function(){
                 var kws=getKeywords();
                 var doms=$("#b2sell_comp_domains").val().split(/\\n+/)
@@ -572,14 +680,24 @@ class B2Sell_Competencia {
                         html+="<canvas id=\\\"b2sell_comp_visibility_chart\\\" height=\\\"140\\\"></canvas>";
                         html+="<div id=\\\"b2sell_comp_visibility_values\\\" style=\\\"display:flex;justify-content:space-around;margin-top:10px;\\\"></div>";
                         html+="</div>";
+                        html+="<div id=\\\"b2sell_comp_visibility_trend\\\" style=\\\"margin-top:30px;\\\">";
+                        html+="<h3>Evolución del índice de visibilidad</h3>";
+                        html+="<div class=\\\"b2sell-comp-chart-wrapper\\\" style=\\\"position:relative;height:260px;\\\">";
+                        html+="<canvas id=\\\"b2sell_comp_visibility_trend_chart\\\" style=\\\"width:100%;height:100%;\\\"></canvas>";
+                        html+="</div>";
+                        html+="<p id=\\\"b2sell_comp_visibility_trend_empty\\\" style=\\\"display:none;margin-top:10px;\\\">Sin datos históricos de visibilidad.</p>";
+                        html+="</div>";
+                        destroyHistoryChart("b2sell_comp_visibility_trend_chart");
                         $("#b2sell_comp_results").html(html);
+                        b2sellCompPrimaryDomain=data.domain||b2sellCompPrimaryDomain||"";
                         renderVisibilityChart(data.visibility);
                         if(data.history_entry&&data.history_entry.date){
                             var updated=false;
                             visHistory=visHistory.map(function(item){if(item.date===data.history_entry.date){updated=true;return data.history_entry;}return item;});
                             if(!updated){visHistory.push(data.history_entry);}
-                            renderVisibilityHistoryChart();
                         }
+                        renderVisibilityHistoryChart("b2sell_comp_visibility_trend_chart","b2sell_comp_visibility_trend_empty",b2sellCompPrimaryDomain);
+                        renderVisibilityHistoryChart("b2sell_comp_visibility_history_chart","b2sell_comp_visibility_history_empty",b2sellCompPrimaryDomain);
                     }else{
                         $("#b2sell_comp_results").html("<div class=\\\"error\\\"><p>"+res.data+"</p></div>");
                     }
