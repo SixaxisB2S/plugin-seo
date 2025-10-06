@@ -104,6 +104,27 @@ body {
     flex: 1 1 300px;
 }
 
+.b2sell-comp-visibility-container {
+    margin-top: 30px;
+    max-width: 560px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.b2sell-comp-visibility-canvas {
+    width: 100% !important;
+    height: 200px !important;
+}
+
+.b2sell-comp-visibility-values {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 10px;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
 /* Gauge styles */
 .b2sell-gauge {
     max-width: 150px;
