@@ -342,6 +342,11 @@ body {
     color: #455064;
 }
 
+.crear-blog-preview__content img {
+    max-width: 100%;
+    height: auto;
+}
+
 
 .crear-blog-preview__content .b2sell-blog-article {
     background: #ffffff;
