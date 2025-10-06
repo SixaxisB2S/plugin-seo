@@ -472,7 +472,10 @@ class B2Sell_GPT_Generator {
             wp_send_json_error( array( 'message' => $result->get_error_message() ) );
         }
 
-        $content = wp_kses_post( $result['content'] );
+        $generated = $result['content'];
+        $normalized = $this->normalize_blog_content( $generated, $post_topic );
+        $template   = $this->build_blog_article( $normalized, $image_url, $post_topic, $cta_text, $cta_link );
+        $content    = wp_kses_post( $template );
 
         wp_send_json_success(
             array(
@@ -529,7 +532,7 @@ class B2Sell_GPT_Generator {
 
         $post_topic = mb_substr( $post_topic, 0, 500 );
 
-        if ( $cta_page ) {
+        if ( $cta_page && false === strpos( $raw_content, 'b2sell-blog-cta' ) ) {
             $cta_url = get_permalink( $cta_page );
             if ( $cta_url ) {
                 $cta_label = $cta_text ? $cta_text : get_the_title( $cta_page );
@@ -729,6 +732,164 @@ class B2Sell_GPT_Generator {
             'content' => $content,
             'over'    => $over,
         );
+    }
+
+    private function normalize_blog_content( $content, $post_topic ) {
+        $content = trim( preg_replace( '/\r\n?/', "\n", $content ) );
+
+        if ( ! preg_match( '/<h1[\s>]/i', $content ) ) {
+            $content = preg_replace( '/^\s*#\s+(.+)$/m', '<h1>$1</h1>', $content );
+        }
+
+        $content = preg_replace( '/^\s*###\s+(.+)$/m', '<h3>$1</h3>', $content );
+        $content = preg_replace( '/^\s*##\s+(.+)$/m', '<h2>$1</h2>', $content );
+
+        $content = preg_replace_callback(
+            '/!\[([^\]]*)\]\(([^\)\s]+)(?:\s+"([^\"]*)")?\)/',
+            function ( $matches ) use ( $post_topic ) {
+                $alt       = $matches[1] ? $matches[1] : $post_topic;
+                $caption   = $matches[3] ? $matches[3] : $matches[1];
+                $image_tag = sprintf(
+                    '<figure class="b2sell-blog-inline-media"><img src="%s" alt="%s" />',
+                    esc_url( $matches[2] ),
+                    esc_attr( $alt )
+                );
+                if ( $caption ) {
+                    $image_tag .= sprintf( '<figcaption>%s</figcaption>', esc_html( $caption ) );
+                }
+                $image_tag .= '</figure>';
+                return $image_tag;
+            },
+            $content
+        );
+
+        $content = preg_replace_callback(
+            '/\[([^\]]+)\]\((https?:[^\)\s]+)(?:\s+"([^\"]*)")?\)/',
+            function ( $matches ) {
+                $title_attr = $matches[3] ? ' title="' . esc_attr( $matches[3] ) . '"' : '';
+                return sprintf( '<a href="%s"%s>%s</a>', esc_url( $matches[2] ), $title_attr, esc_html( $matches[1] ) );
+            },
+            $content
+        );
+
+        $content = preg_replace( '/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $content );
+        $content = preg_replace( '/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/s', '<em>$1</em>', $content );
+
+        $lines   = explode( "\n", $content );
+        $output  = '';
+        $in_ul   = false;
+        $in_ol   = false;
+
+        foreach ( $lines as $line ) {
+            if ( preg_match( '/^\s*[-\*\+]\s+(.+)/', $line, $matches ) ) {
+                if ( $in_ol ) {
+                    $output .= '</ol>';
+                    $in_ol = false;
+                }
+                if ( ! $in_ul ) {
+                    $output .= '<ul>';
+                    $in_ul = true;
+                }
+                $output .= '<li>' . $matches[1] . '</li>';
+            } elseif ( preg_match( '/^\s*\d+\.\s+(.+)/', $line, $matches ) ) {
+                if ( $in_ul ) {
+                    $output .= '</ul>';
+                    $in_ul = false;
+                }
+                if ( ! $in_ol ) {
+                    $output .= '<ol>';
+                    $in_ol = true;
+                }
+                $output .= '<li>' . $matches[1] . '</li>';
+            } else {
+                if ( $in_ul ) {
+                    $output .= '</ul>';
+                    $in_ul = false;
+                }
+                if ( $in_ol ) {
+                    $output .= '</ol>';
+                    $in_ol = false;
+                }
+                $output .= $line . "\n";
+            }
+        }
+
+        if ( $in_ul ) {
+            $output .= '</ul>';
+        }
+        if ( $in_ol ) {
+            $output .= '</ol>';
+        }
+
+        $output = wpautop( trim( $output ) );
+
+        $output = preg_replace_callback(
+            '/<p>\s*(<h[1-3][^>]*>.*?<\/h[1-3]>)\s*<\/p>/',
+            function ( $matches ) {
+                return $matches[1];
+            },
+            $output
+        );
+
+        $output = preg_replace(
+            '/<p>\s*(<figure[^>]*>.*?<\/figure>)\s*<\/p>/',
+            '$1',
+            $output
+        );
+
+        if ( preg_match( '/<p>(.*?)<\/p>/', $output, $matches ) ) {
+            $lead      = '<p class="b2sell-blog-lead">' . $matches[1] . '</p>';
+            $output = preg_replace( '/<p>(.*?)<\/p>/', $lead, $output, 1 );
+        }
+
+        return $output;
+    }
+
+    private function build_blog_article( $content, $image_url, $post_topic, $cta_text, $cta_link ) {
+        $title_html = '';
+        if ( preg_match( '/<h1[^>]*>.*?<\/h1>/i', $content, $matches ) ) {
+            $title_html = $matches[0];
+            $content    = preg_replace( '/<h1[^>]*>.*?<\/h1>/i', '', $content, 1 );
+        }
+
+        $title_text = $title_html ? wp_strip_all_tags( $title_html ) : '';
+        if ( ! $title_text ) {
+            $title_text = mb_substr( wp_strip_all_tags( $content ), 0, 80 );
+            $title_html = '<h1>' . esc_html( $title_text ) . '</h1>';
+        }
+
+        $hero_media = '';
+        if ( $image_url ) {
+            $hero_media = sprintf(
+                '<figure class="b2sell-blog-hero__media"><img src="%s" alt="%s" />',
+                esc_url( $image_url ),
+                esc_attr( $title_text ? $title_text : $post_topic )
+            );
+            if ( $post_topic ) {
+                $hero_media .= sprintf( '<figcaption>%s</figcaption>', esc_html( $post_topic ) );
+            }
+            $hero_media .= '</figure>';
+        }
+
+        $body_content = trim( $content );
+
+        $article  = '<article class="b2sell-blog-article">';
+        $article .= '<header class="b2sell-blog-hero">';
+        $article .= '<div class="b2sell-blog-hero__content">' . $title_html . '</div>';
+        if ( $hero_media ) {
+            $article .= $hero_media;
+        }
+        $article .= '</header>';
+        $article .= '<div class="b2sell-blog-body">' . $body_content . '</div>';
+        $article .= sprintf(
+            '<footer class="b2sell-blog-footer"><div class="b2sell-blog-cta"><span class="b2sell-blog-cta__label">%s</span><a class="button button-primary b2sell-blog-cta-button" href="%s" target="_blank" rel="noopener">%s</a></div></footer>',
+            esc_html__( '¿Listo para dar el siguiente paso?', 'b2sell-seo-assistant' ),
+            esc_url( $cta_link ),
+            esc_html( $cta_text )
+        );
+        $article .= '</article>';
+
+        return $article;
     }
 
     public function ajax_insert() {
