@@ -146,11 +146,11 @@ class B2Sell_SEO_Analysis {
             );
             $history = esc_attr( wp_json_encode( $row['history'] ) );
             echo '<tr class="b2sell-history-row" data-history="' . $history . '">';
-            echo '<td>' . esc_html( $row['title'] ) . '</td>';
+            echo '<td><a class="b2sell-detail-link" href="' . esc_url( $link ) . '">' . esc_html( $row['title'] ) . '</a></td>';
             echo '<td>' . esc_html( $row['type'] ) . '</td>';
             echo '<td>' . esc_html( $row['date'] ) . '</td>';
             echo '<td>' . esc_html( $row['score'] ) . '</td>';
-            echo '<td><a class="button" href="' . esc_url( $link ) . '">Analizar</a></td>';
+            echo '<td><a class="button button-secondary" href="' . esc_url( $link ) . '">Ver detalle</a> <a class="button" href="' . esc_url( $link ) . '">Analizar</a></td>';
             echo '</tr>';
         }
         echo '</tbody></table>';
@@ -211,12 +211,12 @@ class B2Sell_SEO_Analysis {
                 admin_url( 'admin.php' )
             );
             echo '<tr data-id="' . esc_attr( $product->ID ) . '">';
-            echo '<td>' . esc_html( $product->post_title ) . '</td>';
+            echo '<td><a class="b2sell-detail-link" href="' . esc_url( $analyze ) . '">' . esc_html( $product->post_title ) . '</a></td>';
             echo '<td>' . esc_html( $sku ) . '</td>';
             echo '<td>' . esc_html( $date ) . '</td>';
             echo '<td>' . esc_html( $score ) . '</td>';
             echo '<td class="b2sell-product-missing">' . esc_html( $missing ) . '</td>';
-            echo '<td><a class="button" href="' . esc_url( $analyze ) . '">Analizar</a> <button class="button b2sell-product-alt" data-id="' . esc_attr( $product->ID ) . '">Generar ALT</button></td>';
+            echo '<td><a class="button button-secondary" href="' . esc_url( $analyze ) . '">Ver detalle</a> <a class="button" href="' . esc_url( $analyze ) . '">Analizar</a> <button class="button b2sell-product-alt" data-id="' . esc_attr( $product->ID ) . '">Generar ALT</button></td>';
             echo '</tr>';
         }
 
