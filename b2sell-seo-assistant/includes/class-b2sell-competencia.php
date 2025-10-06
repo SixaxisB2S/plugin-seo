@@ -470,9 +470,40 @@ class B2Sell_Competencia {
         echo '<h2 class="nav-tab-wrapper"><a href="#" class="nav-tab nav-tab-active" data-tab="analysis">Análisis</a><a href="#" class="nav-tab" data-tab="history">Histórico</a></h2>';
 
         echo '<div id="b2sell_comp_tab_analysis" class="b2sell-comp-tab">';
-        echo '<p>Ingresa hasta 10 palabras clave (una por línea) y hasta 5 dominios competidores.</p>';
-        echo '<textarea id="b2sell_comp_keywords" placeholder="Palabras clave" style="width:300px;height:100px;"></textarea> ';
-        echo '<textarea id="b2sell_comp_domains" placeholder="competidor1.com\ncompetidor2.com" style="width:300px;height:100px;margin-left:20px;">' . esc_textarea( implode( "\n", $competitors ) ) . '</textarea>';
+        echo '<style id="b2sell_comp_panel_styles">';
+        echo '.b2sell-comp-input-grid{display:flex;flex-wrap:wrap;gap:24px;margin-top:15px;align-items:flex-start;}';
+        echo '.b2sell-comp-input-block{flex:1 1 280px;background:#ffffff;border-radius:12px;padding:16px;box-shadow:0 12px 30px rgba(15,23,42,0.08);}';
+        echo '.b2sell-comp-input-block h3{margin:0 0 12px;font-size:16px;font-weight:600;color:#0f172a;}';
+        echo '.b2sell-comp-input-block textarea{width:100%;height:120px;resize:vertical;}';
+        echo '.b2sell-comp-domain-row{display:flex;gap:8px;align-items:center;}';
+        echo '#b2sell_comp_domain_input{flex:1;}';
+        echo '#b2sell_comp_add_domain{display:inline-flex;align-items:center;gap:6px;}';
+        echo '#b2sell_comp_add_domain .dashicons{width:16px;height:16px;font-size:16px;}';
+        echo '.b2sell-comp-domain-list{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:10px;}';
+        echo '.b2sell-comp-domain-item{display:flex;align-items:center;gap:6px;background:#f1f5f9;border-radius:999px;padding:6px 10px;}';
+        echo '.b2sell-comp-domain-text{font-weight:500;color:#0f172a;}';
+        echo '.b2sell-comp-domain-empty{color:#6b7280;font-style:italic;}';
+        echo '.b2sell-comp-remove-domain{color:#ef4444;}';
+        echo '.b2sell-comp-remove-domain .dashicons{width:16px;height:16px;font-size:16px;}';
+        echo '@media (max-width:782px){.b2sell-comp-input-block{flex:1 1 100%;}}';
+        echo '</style>';
+        echo '<p>Ingresa hasta 10 palabras clave (una por línea) y gestiona hasta 5 dominios competidores con el botón "Añadir".</p>';
+        echo '<div class="b2sell-comp-input-grid">';
+        echo '<div class="b2sell-comp-input-block">';
+        echo '<h3>Palabras clave</h3>';
+        echo '<textarea id="b2sell_comp_keywords" placeholder="Palabras clave"></textarea>';
+        echo '<p class="description">Una keyword por línea. Máximo 10.</p>';
+        echo '</div>';
+        echo '<div class="b2sell-comp-input-block">';
+        echo '<h3>Competidores</h3>';
+        echo '<div class="b2sell-comp-domain-row">';
+        echo '<input type="text" id="b2sell_comp_domain_input" placeholder="competidor.com" class="regular-text" />';
+        echo '<button type="button" class="button" id="b2sell_comp_add_domain"><span class="dashicons dashicons-plus-alt2"></span> Añadir</button>';
+        echo '</div>';
+        echo '<p class="description" id="b2sell_comp_domain_help">Añade hasta 5 dominios competidores relevantes.</p>';
+        echo '<ul id="b2sell_comp_domain_list" class="b2sell-comp-domain-list"></ul>';
+        echo '</div>';
+        echo '</div>';
         echo '<div style="margin-top:15px;">';
         echo '<label for="b2sell_comp_result_count">Resultados a analizar por keyword:</label> ';
         echo '<select id="b2sell_comp_result_count" style="margin-left:10px;">';
@@ -527,7 +558,11 @@ class B2Sell_Competencia {
         echo '<div id="b2sell_comp_hist_modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);">';
         echo '<div style="background:#fff;padding:20px;max-width:800px;margin:50px auto;"><div id="b2sell_comp_hist_modal_content"></div><button class="button" id="b2sell_comp_hist_close">Cerrar</button></div></div>';
         echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
-        echo '<script>var b2sellCompNonce="' . esc_js( $nonce ) . '",b2sellCompProvider="' . esc_js( $provider ) . '",b2sellCompVisibilityHistory=' . $vis_history_json . ',b2sellCompPrimaryDomain="' . esc_js( $site_domain ) . '";</script>';
+        $competitors_json = wp_json_encode( array_values( $competitors ) );
+        if ( false === $competitors_json ) {
+            $competitors_json = '[]';
+        }
+        echo '<script>var b2sellCompNonce="' . esc_js( $nonce ) . '",b2sellCompProvider="' . esc_js( $provider ) . '",b2sellCompVisibilityHistory=' . $vis_history_json . ',b2sellCompPrimaryDomain="' . esc_js( $site_domain ) . '",b2sellCompInitialDomains=' . $competitors_json . ';</script>';
         echo '<script>
         jQuery(function($){
             $(".nav-tab-wrapper .nav-tab").on("click",function(e){e.preventDefault();var t=$(this).data("tab");$(".nav-tab").removeClass("nav-tab-active");$(this).addClass("nav-tab-active");$(".b2sell-comp-tab").hide();$("#b2sell_comp_tab_"+t).show();});
@@ -558,6 +593,83 @@ class B2Sell_Competencia {
             $("#b2sell_comp_keywords").on("input",updateNotice);
             $("#b2sell_comp_result_count").on("change",updateNotice);
             updateNotice();
+            var maxCompetitors=5;
+            var domainInput=$("#b2sell_comp_domain_input");
+            var domainAddBtn=$("#b2sell_comp_add_domain");
+            var domainList=$("#b2sell_comp_domain_list");
+            var domainHelp=$("#b2sell_comp_domain_help");
+            var defaultDomainHelp=domainHelp.text();
+            var compDomains=Array.isArray(window.b2sellCompInitialDomains)?window.b2sellCompInitialDomains.slice(0,maxCompetitors):[];
+            function normalizeDomain(domain){
+                if(!domain){return "";}
+                domain=$.trim(domain);
+                if(!domain){return "";}
+                domain=domain.replace(/^https?:\/\//i,"");
+                domain=domain.replace(/\s+/g,"");
+                domain=domain.replace(/\/.*$/,"");
+                return domain.toLowerCase();
+            }
+            function renderDomainList(){
+                domainList.empty();
+                if(!compDomains.length){
+                    domainList.append($("<li>",{"class":"b2sell-comp-domain-empty"}).text("No has añadido competidores."));
+                }else{
+                    compDomains.forEach(function(domain,index){
+                        var item=$("<li>",{"class":"b2sell-comp-domain-item"});
+                        $("<span>",{"class":"b2sell-comp-domain-text"}).text(domain).appendTo(item);
+                        var removeBtn=$("<button>",{type:"button","class":"button-link-delete b2sell-comp-remove-domain","data-index":index,"aria-label":"Eliminar "+domain});
+                        $("<span>",{"class":"dashicons dashicons-no-alt"}).appendTo(removeBtn);
+                        removeBtn.appendTo(item);
+                        domainList.append(item);
+                    });
+                }
+                var disabled=compDomains.length>=maxCompetitors;
+                domainInput.prop("disabled",disabled);
+                domainAddBtn.prop("disabled",disabled);
+                if(disabled){
+                    domainInput.attr("placeholder","Límite alcanzado");
+                    domainHelp.text("Has llegado al máximo de 5 dominios. Elimina alguno para añadir nuevos.");
+                }else{
+                    domainInput.attr("placeholder","competidor.com");
+                    domainHelp.text(defaultDomainHelp);
+                }
+            }
+            function addDomain(domain){
+                if(!domain){return;}
+                if(compDomains.indexOf(domain)!==-1){
+                    domainInput.val("");
+                    return;
+                }
+                if(compDomains.length>=maxCompetitors){
+                    return;
+                }
+                compDomains.push(domain);
+                domainInput.val("");
+                renderDomainList();
+            }
+            domainAddBtn.on("click",function(e){
+                e.preventDefault();
+                var domain=normalizeDomain(domainInput.val());
+                addDomain(domain);
+                domainInput.focus();
+            });
+            domainInput.on("keypress",function(e){
+                if(13===e.which){
+                    e.preventDefault();
+                    var domain=normalizeDomain($(this).val());
+                    addDomain(domain);
+                }
+            });
+            domainList.on("click",".b2sell-comp-remove-domain",function(e){
+                e.preventDefault();
+                var idx=parseInt($(this).data("index"),10);
+                if(isNaN(idx)){
+                    return;
+                }
+                compDomains.splice(idx,1);
+                renderDomainList();
+            });
+            renderDomainList();
             var visColors=["#0073aa","#ff6384","#36a2eb","#ffcd56","#4bc0c0","#9966ff"];
             var visPrimaryColor=visColors[0]||"#0073aa";
             var defaultAltColors=["#ff6384","#36a2eb","#ffcd56","#4bc0c0","#9966ff","#c9cbcf"];
@@ -732,10 +844,7 @@ class B2Sell_Competencia {
             renderVisibilityHistoryChart("b2sell_comp_visibility_history_chart","b2sell_comp_visibility_history_empty",b2sellCompPrimaryDomain);
             $("#b2sell_comp_search_btn").on("click", function(){
                 var kws=getKeywords();
-                var doms=$("#b2sell_comp_domains").val().split(/\\n+/)
-                    .map(function(s){return $.trim(s);})
-                    .filter(function(s){return s.length;})
-                    .slice(0,5);
+                var doms=compDomains.slice();
                 if(!kws.length){return;}
                 var resultCount=parseInt($("#b2sell_comp_result_count").val(),10)||40;
                 $("#b2sell_comp_results").html("Analizando...");
