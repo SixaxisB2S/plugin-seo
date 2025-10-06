@@ -589,10 +589,11 @@ class B2Sell_SEO_Analysis {
 
 
     private function render_analysis( $post_id, $section = 'content' ) {
-        $post    = get_post( $post_id );
-        $section = in_array( $section, array( 'products', 'content' ), true ) ? $section : 'content';
-        $keyword = isset( $_POST['b2sell_keyword'] ) ? sanitize_text_field( $_POST['b2sell_keyword'] ) : '';
-        $results = false;
+        $post           = get_post( $post_id );
+        $section        = in_array( $section, array( 'products', 'content' ), true ) ? $section : 'content';
+        $stored_keyword = get_post_meta( $post_id, '_b2sell_focus_keyword', true );
+        $keyword        = isset( $_POST['b2sell_keyword'] ) ? sanitize_text_field( wp_unslash( $_POST['b2sell_keyword'] ) ) : $stored_keyword;
+        $results        = false;
 
         if ( isset( $_POST['b2sell_seo_analyze'] ) ) {
             $results = $this->perform_analysis( $post_id, $keyword );
@@ -606,6 +607,11 @@ class B2Sell_SEO_Analysis {
                 'recommendations' => array_slice( wp_list_pluck( $results['recommendations'], 'message' ), 0, 3 ),
             );
             update_post_meta( $post_id, '_b2sell_seo_history', $history );
+            if ( $keyword ) {
+                update_post_meta( $post_id, '_b2sell_focus_keyword', $keyword );
+            } else {
+                delete_post_meta( $post_id, '_b2sell_focus_keyword' );
+            }
         }
 
         $nonce      = wp_create_nonce( 'b2sell_gpt_nonce' );
@@ -986,21 +992,29 @@ class B2Sell_SEO_Analysis {
         );
     }
 
-    private function perform_analysis( $post_id, $keyword ) {
-        $post     = get_post( $post_id );
-        $content  = $post->post_content;
-        $metrics  = array();
-        $recs     = array(); // array of arrays with message/action/current/keyword
-        $score    = 0;
-        $host     = parse_url( home_url(), PHP_URL_HOST );
 
-        // Title length
+    private function perform_analysis( $post_id, $keyword ) {
+        $post             = get_post( $post_id );
+        $content          = $post->post_content;
+        $metrics          = array();
+        $recs             = array();
+        $keyword          = is_string( $keyword ) ? trim( $keyword ) : '';
+        $keyword_lower    = $keyword ? ( function_exists( 'mb_strtolower' ) ? mb_strtolower( $keyword ) : strtolower( $keyword ) ) : '';
+        $keyword_slug     = $keyword ? sanitize_title( $keyword ) : '';
+        $host             = parse_url( home_url(), PHP_URL_HOST );
+        $score_components = array();
+
+        if ( '' === $keyword ) {
+            $recs[] = array( 'message' => 'Define una palabra clave principal para medir la optimización.' );
+        }
+
+        // Longitud de título.
         $title_len   = strlen( $post->post_title );
-        $title_score = ( $title_len >= 30 && $title_len <= 60 ) ? 10 : ( ( $title_len >= 20 && $title_len <= 70 ) ? 5 : 0 );
-        $score      += $title_score;
-        if ( 10 === $title_score ) {
+        if ( $title_len >= 30 && $title_len <= 60 ) {
+            $title_score = 10;
             $title_color = 'green';
-        } elseif ( 5 === $title_score ) {
+        } elseif ( $title_len >= 20 && $title_len <= 70 ) {
+            $title_score = 5;
             $title_color = 'yellow';
             $recs[]      = array(
                 'message' => 'El título debería estar entre 30 y 60 caracteres.',
@@ -1009,9 +1023,10 @@ class B2Sell_SEO_Analysis {
                 'keyword' => $keyword,
             );
         } else {
+            $title_score = 0;
             $title_color = 'red';
             $recs[]      = array(
-                'message' => 'El título excede los límites recomendados (30-60 caracteres).',
+                'message' => 'Ajusta el título para mantenerlo entre 30 y 60 caracteres.',
                 'action'  => 'title',
                 'current' => $post->post_title,
                 'keyword' => $keyword,
@@ -1021,18 +1036,19 @@ class B2Sell_SEO_Analysis {
             'value' => $title_len . ' caracteres',
             'color' => $title_color,
         );
+        $score_components[] = $title_score;
 
-        // Meta description
+        // Meta description.
         $meta_description = get_post_meta( $post_id, '_yoast_wpseo_metadesc', true );
         if ( empty( $meta_description ) ) {
             $meta_description = get_the_excerpt( $post_id );
         }
-        $meta_len   = strlen( $meta_description );
-        $meta_score = ( $meta_len >= 70 && $meta_len <= 160 ) ? 10 : ( ( $meta_len >= 50 && $meta_len <= 170 ) ? 5 : 0 );
-        $score     += $meta_score;
-        if ( 10 === $meta_score ) {
+        $meta_len   = strlen( (string) $meta_description );
+        if ( $meta_len >= 70 && $meta_len <= 160 ) {
+            $meta_score = 10;
             $meta_color = 'green';
-        } elseif ( 5 === $meta_score ) {
+        } elseif ( $meta_len >= 50 && $meta_len <= 170 ) {
+            $meta_score = 5;
             $meta_color = 'yellow';
             $recs[]     = array(
                 'message' => 'La meta description debería tener entre 70 y 160 caracteres.',
@@ -1041,9 +1057,10 @@ class B2Sell_SEO_Analysis {
                 'keyword' => $keyword ? $keyword : $post->post_title,
             );
         } else {
+            $meta_score = 0;
             $meta_color = 'red';
             $recs[]     = array(
-                'message' => 'La meta description está fuera del rango recomendado (70-160 caracteres).',
+                'message' => 'Optimiza la meta description para alcanzar entre 70 y 160 caracteres.',
                 'action'  => 'meta',
                 'current' => $meta_description,
                 'keyword' => $keyword ? $keyword : $post->post_title,
@@ -1053,124 +1070,353 @@ class B2Sell_SEO_Analysis {
             'value' => $meta_len . ' caracteres',
             'color' => $meta_color,
         );
+        $score_components[] = $meta_score;
 
-        // Parse content
+        $permalink = get_permalink( $post_id );
+
+        // Parse content.
         $dom = new DOMDocument();
         libxml_use_internal_errors( true );
         $dom->loadHTML( '<?xml encoding="utf-8" ?>' . $content );
         libxml_clear_errors();
         $text_content = wp_strip_all_tags( $content );
+        $text_lower   = function_exists( 'mb_strtolower' ) ? mb_strtolower( $text_content ) : strtolower( $text_content );
+        $text_excerpt = wp_trim_words( $text_content, 50, '' );
 
-        // Headings
-        $h1 = $h2 = $h3 = false;
-        foreach ( array( 'h1', 'h2', 'h3' ) as $tag ) {
-            $elements = $dom->getElementsByTagName( $tag );
-            foreach ( $elements as $el ) {
-                $text = strtolower( $el->textContent );
-                if ( $keyword && false !== strpos( $text, strtolower( $keyword ) ) ) {
-                    if ( 'h1' === $tag ) {
-                        $h1 = true;
-                    }
-                    if ( 'h2' === $tag ) {
-                        $h2 = true;
-                    }
-                    if ( 'h3' === $tag ) {
-                        $h3 = true;
+        // Keyword en título/H1.
+        $title_keyword_has = false;
+        if ( $keyword ) {
+            $sources = array( $post->post_title );
+            $h1s     = $dom->getElementsByTagName( 'h1' );
+            foreach ( $h1s as $h1 ) {
+                $sources[] = $h1->textContent;
+            }
+            foreach ( $sources as $source ) {
+                if ( false !== stripos( $source, $keyword ) ) {
+                    $title_keyword_has = true;
+                    break;
+                }
+            }
+        }
+        if ( $title_keyword_has ) {
+            $title_keyword_score = 10;
+            $title_keyword_color = 'green';
+        } elseif ( $keyword ) {
+            $title_keyword_score = 0;
+            $title_keyword_color = 'red';
+            $recs[]              = array(
+                'message' => 'Añade la palabra clave principal en el título o encabezado H1.',
+                'action'  => 'title',
+                'current' => $post->post_title,
+                'keyword' => $keyword,
+            );
+        } else {
+            $title_keyword_score = 0;
+            $title_keyword_color = 'red';
+        }
+        $metrics['Keyword principal en el título (H1)'] = array(
+            'value' => $title_keyword_has ? 'Incluida' : 'No incluida',
+            'color' => $title_keyword_color,
+        );
+        $score_components[] = $title_keyword_score;
+
+        // Keyword en URL.
+        $slug            = $permalink ? basename( untrailingslashit( $permalink ) ) : '';
+        $url_has_keyword = $keyword && $keyword_slug && false !== strpos( $slug, $keyword_slug );
+        if ( $url_has_keyword ) {
+            $url_score = 10;
+            $url_color = 'green';
+        } elseif ( $keyword ) {
+            $url_score = 0;
+            $url_color = 'red';
+            $recs[]    = array( 'message' => 'Incluye la palabra clave en el slug/URL de la página.' );
+        } else {
+            $url_score = 0;
+            $url_color = 'red';
+        }
+        $metrics['Keyword en la URL'] = array(
+            'value' => $url_has_keyword ? 'Incluida' : 'No incluida',
+            'color' => $url_color,
+        );
+        $score_components[] = $url_score;
+
+        // Keyword en meta description.
+        $meta_has_keyword = $keyword && $meta_description && ( false !== stripos( $meta_description, $keyword ) );
+        if ( $meta_has_keyword ) {
+            $meta_keyword_score = 10;
+            $meta_keyword_color = 'green';
+        } elseif ( $keyword && $meta_description ) {
+            $meta_keyword_score = 0;
+            $meta_keyword_color = 'red';
+            $recs[]             = array(
+                'message' => 'Incluye la palabra clave en la meta description.',
+                'action'  => 'meta',
+                'current' => $meta_description,
+                'keyword' => $keyword,
+            );
+        } elseif ( $keyword ) {
+            $meta_keyword_score = 0;
+            $meta_keyword_color = 'red';
+        } else {
+            $meta_keyword_score = 0;
+            $meta_keyword_color = 'red';
+        }
+        $metrics['Keyword en la metadescripción'] = array(
+            'value' => $meta_has_keyword ? 'Incluida' : 'No incluida',
+            'color' => $meta_keyword_color,
+        );
+        $score_components[] = $meta_keyword_score;
+
+        // Keyword en primer párrafo.
+        $paragraphs         = $dom->getElementsByTagName( 'p' );
+        $first_paragraph    = '';
+        if ( $paragraphs->length > 0 ) {
+            $first_paragraph = trim( $paragraphs->item( 0 )->textContent );
+        }
+        $first_paragraph_has = $keyword && $first_paragraph && ( false !== stripos( $first_paragraph, $keyword ) );
+        if ( $first_paragraph_has ) {
+            $first_paragraph_score = 10;
+            $first_paragraph_color = 'green';
+        } elseif ( $keyword && $first_paragraph ) {
+            $first_paragraph_score = 0;
+            $first_paragraph_color = 'red';
+            $recs[]                = array(
+                'message' => 'Incluye la palabra clave en el primer párrafo del contenido.',
+                'action'  => 'rewrite',
+                'current' => wp_trim_words( $first_paragraph, 50, '' ),
+                'keyword' => $keyword,
+            );
+        } else {
+            $first_paragraph_score = 0;
+            $first_paragraph_color = 'red';
+        }
+        $metrics['Keyword en el primer párrafo del contenido'] = array(
+            'value' => $first_paragraph_has ? 'Incluida' : 'No incluida',
+            'color' => $first_paragraph_color,
+        );
+        $score_components[] = $first_paragraph_score;
+
+        // Subtítulos.
+        $subtitle_hits = 0;
+        if ( $keyword ) {
+            foreach ( array( 'h2', 'h3' ) as $tag ) {
+                $elements = $dom->getElementsByTagName( $tag );
+                foreach ( $elements as $el ) {
+                    if ( false !== stripos( $el->textContent, $keyword ) ) {
+                        $subtitle_hits++;
                     }
                 }
             }
         }
-        $head_score = 0;
-        if ( $keyword ) {
-            $head_score += $h1 ? 4 : 0;
-            $head_score += $h2 ? 3 : 0;
-            $head_score += $h3 ? 3 : 0;
-            if ( ! $h1 ) {
-                $recs[] = array( 'message' => 'Agregar la palabra clave en un H1.' );
-            }
-            if ( ! $h2 ) {
-                $recs[] = array( 'message' => 'Agregar la palabra clave en algún H2.' );
-            }
-            if ( ! $h3 ) {
-                $recs[] = array( 'message' => 'Agregar la palabra clave en algún H3.' );
-            }
+        if ( $subtitle_hits > 0 ) {
+            $subtitle_score = 10;
+            $subtitle_color = 'green';
+        } elseif ( $keyword ) {
+            $subtitle_score = 0;
+            $subtitle_color = 'red';
+            $recs[]         = array( 'message' => 'Incluye la palabra clave en subtítulos (H2 o H3).' );
+        } else {
+            $subtitle_score = 0;
+            $subtitle_color = 'red';
         }
-        $score += $head_score;
-        $head_color = ( $head_score >= 7 ) ? 'green' : ( ( $head_score >= 3 ) ? 'yellow' : 'red' );
-        $metrics['Uso de keyword en H1/H2/H3'] = array(
-            'value' => ( $h1 ? 'H1 ' : '' ) . ( $h2 ? 'H2 ' : '' ) . ( $h3 ? 'H3' : '' ),
-            'color' => $head_color,
+        $metrics['Keyword en subtítulos (H2, H3...)'] = array(
+            'value' => $subtitle_hits > 0 ? $subtitle_hits . ' subtítulo(s)' : 'No presente',
+            'color' => $subtitle_color,
         );
+        $score_components[] = $subtitle_score;
 
-        // Links
-        $internal_links = 0;
-        $external_links = 0;
-        $links          = $dom->getElementsByTagName( 'a' );
+        // Enlaces.
+        $internal_links    = 0;
+        $external_links    = 0;
+        $relevant_internal = 0;
+        $trusted_external  = 0;
+        $links             = $dom->getElementsByTagName( 'a' );
         foreach ( $links as $a ) {
-            $href = $a->getAttribute( 'href' );
-            if ( ! $href ) {
+            $href = trim( $a->getAttribute( 'href' ) );
+            if ( '' === $href ) {
                 continue;
             }
             $href_host = parse_url( $href, PHP_URL_HOST );
+            $scheme    = parse_url( $href, PHP_URL_SCHEME );
+            $anchor    = trim( preg_replace( '/\s+/', ' ', $a->textContent ) );
             if ( ! $href_host || $href_host === $host ) {
                 $internal_links++;
+                if ( '' !== $anchor ) {
+                    $anchor_words = str_word_count( $anchor );
+                    if ( ( $keyword && false !== stripos( $anchor, $keyword ) ) || $anchor_words >= 2 ) {
+                        $relevant_internal++;
+                    }
+                }
             } else {
                 $external_links++;
+                if ( 'https' === strtolower( (string) $scheme ) ) {
+                    $trusted_external++;
+                }
             }
         }
         $link_score = ( $internal_links > 0 ? 5 : 0 ) + ( $external_links > 0 ? 5 : 0 );
-        $score     += $link_score;
+        $links_color = ( 10 === $link_score ) ? 'green' : ( ( $link_score >= 5 ) ? 'yellow' : 'red' );
         if ( $internal_links === 0 ) {
-            $recs[] = array( 'message' => 'Agregar enlaces internos.' );
+            $recs[] = array( 'message' => 'Agrega enlaces internos que refuercen el contenido.' );
         }
         if ( $external_links === 0 ) {
-            $recs[] = array( 'message' => 'Agregar enlaces externos.' );
+            $recs[] = array( 'message' => 'Añade al menos un enlace externo a una fuente confiable.' );
         }
-        $links_color                     = ( 10 === $link_score ) ? 'green' : ( ( $link_score >= 5 ) ? 'yellow' : 'red' );
         $metrics['Enlaces internos/externos'] = array(
             'value' => $internal_links . ' internos / ' . $external_links . ' externos',
             'color' => $links_color,
         );
+        $score_components[] = $link_score;
 
-        // Images ALT
-        $images          = $dom->getElementsByTagName( 'img' );
-        $img_total       = $images->length;
-        $img_with_alt    = 0;
+        if ( $internal_links === 0 ) {
+            $relevant_internal_score = 0;
+            $relevant_internal_color = 'red';
+        } elseif ( $relevant_internal > 0 ) {
+            $ratio = $internal_links ? $relevant_internal / $internal_links : 0;
+            if ( $ratio >= 0.5 ) {
+                $relevant_internal_score = 10;
+                $relevant_internal_color = 'green';
+            } else {
+                $relevant_internal_score = 5;
+                $relevant_internal_color = 'yellow';
+                $recs[]                  = array( 'message' => 'Mejora el anchor text de los enlaces internos para que sea más descriptivo.' );
+            }
+        } else {
+            $relevant_internal_score = 0;
+            $relevant_internal_color = 'red';
+            $recs[]                  = array( 'message' => 'Utiliza anchor text descriptivo en los enlaces internos.' );
+        }
+        $metrics['Presencia de enlaces internos con anchor text relevante'] = array(
+            'value' => $internal_links ? $relevant_internal . '/' . $internal_links : 'Sin enlaces',
+            'color' => $relevant_internal_color,
+        );
+        $score_components[] = $relevant_internal_score;
+
+        if ( $external_links === 0 ) {
+            $trusted_external_score = 0;
+            $trusted_external_color = 'red';
+        } elseif ( $trusted_external > 0 ) {
+            $trusted_external_score = 10;
+            $trusted_external_color = 'green';
+        } else {
+            $trusted_external_score = 5;
+            $trusted_external_color = 'yellow';
+            $recs[]                 = array( 'message' => 'Asegúrate de que los enlaces externos apunten a sitios seguros (HTTPS).' );
+        }
+        $metrics['Presencia de enlaces externos a fuentes confiables'] = array(
+            'value' => $external_links ? $trusted_external . '/' . $external_links : 'Sin enlaces',
+            'color' => $trusted_external_color,
+        );
+        $score_components[] = $trusted_external_score;
+
+        // Imágenes y ALT.
+        $images           = $dom->getElementsByTagName( 'img' );
+        $img_total        = $images->length;
+        $img_with_alt     = 0;
+        $img_keyword_alt  = 0;
+        $optimized_images = 0;
         foreach ( $images as $img ) {
-            if ( '' !== $img->getAttribute( 'alt' ) ) {
+            $alt        = trim( $img->getAttribute( 'alt' ) );
+            $src        = $img->getAttribute( 'src' );
+            $alt_lower  = function_exists( 'mb_strtolower' ) ? mb_strtolower( $alt ) : strtolower( $alt );
+            $filename   = $src ? wp_basename( parse_url( $src, PHP_URL_PATH ) ) : '';
+            $file_slug  = $filename ? sanitize_title( pathinfo( $filename, PATHINFO_FILENAME ) ) : '';
+            if ( '' !== $alt ) {
                 $img_with_alt++;
             }
+            if ( $keyword && '' !== $alt && false !== strpos( $alt_lower, $keyword_lower ) ) {
+                $img_keyword_alt++;
+            }
+            if ( $keyword && '' !== $alt && $keyword_slug && $file_slug && false !== strpos( $file_slug, $keyword_slug ) && false !== strpos( $alt_lower, $keyword_lower ) ) {
+                $optimized_images++;
+            }
         }
-        if ( 0 === $img_total ) {
+        if ( 0 === $img_total || $img_with_alt === $img_total ) {
             $alt_score = 10;
-        } elseif ( $img_with_alt === $img_total ) {
-            $alt_score = 10;
+            $alt_color = 'green';
         } elseif ( $img_with_alt > 0 ) {
             $alt_score = 5;
+            $alt_color = 'yellow';
             $recs[]    = array(
-                'message' => 'Agregar atributos ALT a todas las imágenes.',
+                'message' => 'Agrega atributos ALT a todas las imágenes.',
                 'action'  => 'alt',
                 'current' => $post->post_title,
                 'keyword' => $keyword ? $keyword : $post->post_title,
             );
         } else {
             $alt_score = 0;
+            $alt_color = 'red';
             $recs[]    = array(
-                'message' => 'Agregar atributos ALT a las imágenes.',
+                'message' => 'Incluye atributos ALT descriptivos en las imágenes.',
                 'action'  => 'alt',
                 'current' => $post->post_title,
                 'keyword' => $keyword ? $keyword : $post->post_title,
             );
         }
-        $score     += $alt_score;
-        $alt_color  = ( 10 === $alt_score ) ? 'green' : ( ( $alt_score > 0 ) ? 'yellow' : 'red' );
         $metrics['Imágenes con ALT'] = array(
             'value' => $img_with_alt . '/' . $img_total,
             'color' => $alt_color,
         );
+        $score_components[] = $alt_score;
 
-        // Schema.org
-        $schema = false;
+        if ( 0 === $img_total ) {
+            $alt_keyword_score = 10;
+            $alt_keyword_color = 'green';
+            $alt_keyword_value = 'Sin imágenes';
+        } elseif ( $img_keyword_alt > 0 ) {
+            $ratio = $img_total ? $img_keyword_alt / $img_total : 0;
+            if ( $ratio >= 0.5 ) {
+                $alt_keyword_score = 10;
+                $alt_keyword_color = 'green';
+            } else {
+                $alt_keyword_score = 5;
+                $alt_keyword_color = 'yellow';
+                $recs[]            = array( 'message' => 'Añade la palabra clave al ALT de más imágenes relevantes.' );
+            }
+            $alt_keyword_value = $img_keyword_alt . '/' . $img_total;
+        } else {
+            $alt_keyword_score = 0;
+            $alt_keyword_color = 'red';
+            $alt_keyword_value = '0/' . $img_total;
+            if ( $keyword ) {
+                $recs[] = array( 'message' => 'Incluye la palabra clave en los atributos ALT de las imágenes principales.' );
+            }
+        }
+        $metrics['Palabra clave en atributos ALT de imágenes'] = array(
+            'value' => $alt_keyword_value,
+            'color' => $alt_keyword_color,
+        );
+        $score_components[] = $alt_keyword_score;
+
+        if ( 0 === $img_total ) {
+            $optimized_score = 10;
+            $optimized_color = 'green';
+            $optimized_value = 'Sin imágenes';
+        } elseif ( $optimized_images > 0 ) {
+            $ratio = $img_total ? $optimized_images / $img_total : 0;
+            if ( $ratio >= 0.5 ) {
+                $optimized_score = 10;
+                $optimized_color = 'green';
+            } else {
+                $optimized_score = 5;
+                $optimized_color = 'yellow';
+                $recs[]          = array( 'message' => 'Optimiza más nombres de archivo y ALT con la palabra clave.' );
+            }
+            $optimized_value = $optimized_images . '/' . $img_total;
+        } else {
+            $optimized_score = 0;
+            $optimized_color = 'red';
+            $optimized_value = '0/' . $img_total;
+            $recs[]          = array( 'message' => 'Renombra archivos e incluye la palabra clave en ALT para imágenes clave.' );
+        }
+        $metrics['Imágenes con nombre de archivo y ALT optimizados'] = array(
+            'value' => $optimized_value,
+            'color' => $optimized_color,
+        );
+        $score_components[] = $optimized_score;
+
+        // Schema.org.
+        $schema  = false;
         $scripts = $dom->getElementsByTagName( 'script' );
         foreach ( $scripts as $script ) {
             if ( 'application/ld+json' === strtolower( $script->getAttribute( 'type' ) ) ) {
@@ -1182,89 +1428,180 @@ class B2Sell_SEO_Analysis {
             $schema = true;
         }
         $schema_score = $schema ? 10 : 0;
-        $score       += $schema_score;
+        $schema_color = $schema ? 'green' : 'red';
         if ( ! $schema ) {
-            $recs[] = array( 'message' => 'Agregar datos estructurados (schema.org).' );
+            $recs[] = array( 'message' => 'Agrega datos estructurados (schema.org) al contenido.' );
         }
-        $schema_color                    = $schema ? 'green' : 'red';
         $metrics['Uso de schema.org'] = array(
             'value' => $schema ? 'Sí' : 'No',
             'color' => $schema_color,
         );
+        $score_components[] = $schema_score;
 
-        // Keyword density
-        $text          = strtolower( wp_strip_all_tags( $content ) );
-        $words         = str_word_count( $text, 1 );
+        // Densidad de palabra clave.
+        $words         = str_word_count( $text_lower, 1 );
         $total_words   = count( $words );
         $keyword_count = 0;
-        if ( $keyword ) {
+        if ( $keyword_lower ) {
             foreach ( $words as $w ) {
-                if ( $w === strtolower( $keyword ) ) {
+                if ( $w === $keyword_lower ) {
                     $keyword_count++;
                 }
             }
         }
         $density = $total_words ? ( $keyword_count / $total_words ) * 100 : 0;
         if ( $keyword ) {
-            if ( $density >= 1 && $density <= 3 ) {
+            if ( $density >= 1 && $density <= 2.5 ) {
                 $density_score = 10;
                 $density_color = 'green';
-            } elseif ( $density >= 0.5 && $density <= 4 ) {
+            } elseif ( $density >= 0.8 && $density <= 3 ) {
                 $density_score = 5;
                 $density_color = 'yellow';
                 $recs[]        = array(
-                    'message' => 'Ajustar la densidad de palabras clave entre 1% y 3%.',
+                    'message' => 'Ajusta la densidad de palabras clave entre 1% y 2.5%.',
                     'action'  => 'rewrite',
-                    'current' => wp_trim_words( $text_content, 50, '' ),
+                    'current' => $text_excerpt,
                     'keyword' => $keyword,
                 );
             } else {
                 $density_score = 0;
                 $density_color = 'red';
                 $recs[]        = array(
-                    'message' => 'Densidad de palabras clave fuera de rango (1%-3%).',
+                    'message' => 'La densidad de la palabra clave está fuera de rango (1%-2.5%).',
                     'action'  => 'rewrite',
-                    'current' => wp_trim_words( $text_content, 50, '' ),
+                    'current' => $text_excerpt,
                     'keyword' => $keyword,
                 );
             }
         } else {
             $density_score = 0;
             $density_color = 'red';
-            $recs[]        = array( 'message' => 'Definir una palabra clave principal.' );
         }
-        $score += $density_score;
-        $metrics['Densidad de palabra clave'] = array(
+        $metrics['Densidad de la palabra clave'] = array(
             'value' => round( $density, 2 ) . '%',
             'color' => $density_color,
         );
+        $score_components[] = $density_score;
 
-        // Readability
-        $readability       = $this->flesch_reading_ease( $text_content );
-        if ( $readability > 60 ) {
+        // LSI keywords.
+        $lsi_candidates = array();
+        $yoast_synonyms = get_post_meta( $post_id, '_yoast_wpseo_keywordsynonyms', true );
+        if ( ! empty( $yoast_synonyms ) ) {
+            $lsi_candidates = array_merge( $lsi_candidates, array_map( 'trim', explode( ',', $yoast_synonyms ) ) );
+        }
+        $lsi_candidates = array_merge(
+            $lsi_candidates,
+            wp_get_post_terms( $post_id, 'category', array( 'fields' => 'names' ) ),
+            wp_get_post_tags( $post_id, array( 'fields' => 'names' ) )
+        );
+        $lsi_candidates = array_filter( array_unique( array_map( 'strtolower', $lsi_candidates ) ) );
+        $lsi_found      = array();
+        foreach ( $lsi_candidates as $lsi ) {
+            if ( '' !== $lsi && false !== strpos( $text_lower, $lsi ) ) {
+                $lsi_found[] = $lsi;
+            }
+        }
+        if ( empty( $lsi_candidates ) ) {
+            $lsi_score = 5;
+            $lsi_color = 'yellow';
+            $lsi_value = 'Sin sinónimos definidos';
+            $recs[]    = array( 'message' => 'Añade sinónimos o palabras clave relacionadas (tags o categorías).' );
+        } elseif ( count( $lsi_found ) >= max( 1, ceil( count( $lsi_candidates ) / 2 ) ) ) {
+            $lsi_score = 10;
+            $lsi_color = 'green';
+            $lsi_value = count( $lsi_found ) . '/' . count( $lsi_candidates ) . ' detectadas';
+        } elseif ( ! empty( $lsi_found ) ) {
+            $lsi_score = 5;
+            $lsi_color = 'yellow';
+            $lsi_value = count( $lsi_found ) . '/' . count( $lsi_candidates ) . ' detectadas';
+            $recs[]    = array( 'message' => 'Incorpora más sinónimos o keywords relacionadas en el contenido.' );
+        } else {
+            $lsi_score = 0;
+            $lsi_color = 'red';
+            $lsi_value = '0/' . count( $lsi_candidates ) . ' detectadas';
+            $recs[]    = array( 'message' => 'Incluye sinónimos o palabras clave relacionadas (LSI keywords).' );
+        }
+        $metrics['Presencia de sinónimos o keywords relacionadas (LSI)'] = array(
+            'value' => $lsi_value,
+            'color' => $lsi_color,
+        );
+        $score_components[] = $lsi_score;
+
+        // Longitud del contenido.
+        if ( $total_words >= 800 ) {
+            $length_score = 10;
+            $length_color = 'green';
+        } elseif ( $total_words >= 400 ) {
+            $length_score = 5;
+            $length_color = 'yellow';
+            $recs[]       = array( 'message' => 'Amplía el contenido para superar las 800 palabras si es pertinente.' );
+        } else {
+            $length_score = 0;
+            $length_color = 'red';
+            $recs[]       = array( 'message' => 'Añade más contenido relevante; actualmente es muy corto.' );
+        }
+        $metrics['Longitud del contenido (palabras totales)'] = array(
+            'value' => $total_words . ' palabras',
+            'color' => $length_color,
+        );
+        $score_components[] = $length_score;
+
+        // Legibilidad.
+        $sentences = preg_split( '/[\.!?]+/u', $text_content, -1, PREG_SPLIT_NO_EMPTY );
+        if ( ! is_array( $sentences ) ) {
+            $sentences = array();
+        }
+        $sentence_words_total = 0;
+        foreach ( $sentences as $sentence ) {
+            $sentence_words_total += str_word_count( $sentence );
+        }
+        $sentence_count        = count( $sentences );
+        $avg_sentence_length   = $sentence_count ? $sentence_words_total / $sentence_count : 0;
+        $readability           = $this->flesch_reading_ease( $text_content );
+        if ( $readability >= 60 && $avg_sentence_length <= 20 ) {
             $read_score = 10;
             $read_color = 'green';
-        } elseif ( $readability > 40 ) {
+        } elseif ( $readability >= 50 && $avg_sentence_length <= 25 ) {
             $read_score = 5;
             $read_color = 'yellow';
-            $recs[]     = array( 'message' => 'Mejorar la legibilidad del texto.' );
+            $recs[]     = array( 'message' => 'Mejora la legibilidad con párrafos más cortos y frases simples.' );
         } else {
             $read_score = 0;
             $read_color = 'red';
-            $recs[]     = array( 'message' => 'Legibilidad baja, simplificar el contenido.' );
+            $recs[]     = array( 'message' => 'La legibilidad es baja; simplifica frases y divide párrafos largos.' );
         }
-        $score += $read_score;
-        $metrics['Legibilidad (Flesch)'] = array(
-            'value' => round( $readability, 2 ),
+        $metrics['Legibilidad del texto'] = array(
+            'value' => 'Índice Flesch: ' . round( $readability, 2 ) . ' | Palabras/oración: ' . round( $avg_sentence_length, 2 ),
             'color' => $read_color,
         );
+        $score_components[] = $read_score;
 
-        // Page load time
-        $start     = microtime( true );
-        $response  = wp_remote_get( get_permalink( $post_id ) );
+        // Listas y tablas.
+        $list_count  = $dom->getElementsByTagName( 'ul' )->length + $dom->getElementsByTagName( 'ol' )->length;
+        $table_count = $dom->getElementsByTagName( 'table' )->length;
+        if ( ( $list_count + $table_count ) > 0 ) {
+            $lists_score = 10;
+            $lists_color = 'green';
+        } else {
+            $lists_score = 0;
+            $lists_color = 'red';
+            $recs[]      = array( 'message' => 'Agrega listas o tablas para mejorar la escaneabilidad del contenido.' );
+        }
+        $metrics['Uso de listas y tablas'] = array(
+            'value' => $list_count . ' listas / ' . $table_count . ' tablas',
+            'color' => $lists_color,
+        );
+        $score_components[] = $lists_score;
+
+        // Tiempo de carga y canonical.
+        $start    = microtime( true );
+        $response = wp_remote_get( $permalink );
         $load_time = round( microtime( true ) - $start, 2 );
+        $body      = '';
         if ( is_wp_error( $response ) ) {
             $load_time = 0;
+        } else {
+            $body = wp_remote_retrieve_body( $response );
         }
         if ( $load_time > 0 && $load_time <= 2 ) {
             $speed_score = 10;
@@ -1272,27 +1609,97 @@ class B2Sell_SEO_Analysis {
         } elseif ( $load_time > 0 && $load_time <= 4 ) {
             $speed_score = 5;
             $speed_color = 'yellow';
-            $recs[]      = array( 'message' => 'Mejorar el tiempo de carga (<2s).' );
+            $recs[]      = array( 'message' => 'Mejora el tiempo de carga por debajo de 2 segundos.' );
         } else {
             $speed_score = 0;
             $speed_color = 'red';
-            $recs[]      = array( 'message' => 'Tiempo de carga excesivo (>4s).' );
+            $recs[]      = array( 'message' => 'El tiempo de carga es alto; optimiza imágenes y caché.' );
         }
-        $score += $speed_score;
         $metrics['Tiempo de carga'] = array(
-            'value' => $load_time . 's',
+            'value' => $load_time ? $load_time . 's' : 'No disponible',
             'color' => $speed_color,
         );
+        $score_components[] = $speed_score;
 
-        $score_color = ( $score >= 80 ) ? 'green' : ( ( $score >= 50 ) ? 'yellow' : 'red' );
+        $canonical_score = 0;
+        $canonical_color = 'red';
+        $canonical_value = 'No detectado';
+        if ( is_wp_error( $response ) ) {
+            $canonical_color = 'yellow';
+            $canonical_value = 'No se pudo comprobar';
+            $canonical_score = 5;
+            $recs[]          = array( 'message' => 'No fue posible verificar la etiqueta canonical.' );
+        } elseif ( $body && preg_match( '/<link\s+rel=["\']canonical["\']\s+href=["\']([^"\']+)["\']/i', $body, $m ) ) {
+            $canonical_url   = $m[1];
+            $canonical_value = $canonical_url;
+            if ( filter_var( $canonical_url, FILTER_VALIDATE_URL ) && untrailingslashit( $canonical_url ) === untrailingslashit( $permalink ) ) {
+                $canonical_score = 10;
+                $canonical_color = 'green';
+            } else {
+                $canonical_score = 0;
+                $canonical_color = 'red';
+                $recs[]          = array( 'message' => 'Revisa la etiqueta canonical, no coincide con la URL actual.' );
+            }
+        } else {
+            $recs[] = array( 'message' => 'Agrega una etiqueta canonical que apunte a la URL principal.' );
+        }
+        $metrics['Canonical tag correctamente configurado'] = array(
+            'value' => $canonical_value,
+            'color' => $canonical_color,
+        );
+        $score_components[] = $canonical_score;
+
+        // Canibalización.
+        $cannibal_posts = array();
+        if ( $keyword ) {
+            $others = get_posts(
+                array(
+                    'post_type'      => array( 'post', 'page', 'product' ),
+                    'post_status'    => 'publish',
+                    'posts_per_page' => -1,
+                    'post__not_in'   => array( $post_id ),
+                    'meta_key'       => '_b2sell_focus_keyword',
+                    'meta_value'     => $keyword,
+                )
+            );
+            foreach ( $others as $other ) {
+                $cannibal_posts[] = $other->post_title;
+            }
+        }
+        if ( $keyword && ! empty( $cannibal_posts ) ) {
+            $cannibal_score = 0;
+            $cannibal_color = 'red';
+            $cannibal_value = implode( ', ', $cannibal_posts );
+            $recs[]         = array( 'message' => 'Evita la canibalización: ajusta o enlaza con estas páginas: ' . $cannibal_value . '.' );
+        } elseif ( $keyword ) {
+            $cannibal_score = 10;
+            $cannibal_color = 'green';
+            $cannibal_value = 'Sin conflictos';
+        } else {
+            $cannibal_score = 5;
+            $cannibal_color = 'yellow';
+            $cannibal_value = 'Define una palabra clave para evaluar';
+        }
+        $metrics['Evitar canibalización'] = array(
+            'value' => $cannibal_value,
+            'color' => $cannibal_color,
+        );
+        $score_components[] = $cannibal_score;
+
+        // Calcular puntaje final.
+        $max_score   = count( $score_components ) * 10;
+        $total_score = array_sum( $score_components );
+        $final_score = $max_score ? round( ( $total_score / $max_score ) * 100 ) : 0;
+        $score_color = ( $final_score >= 80 ) ? 'green' : ( ( $final_score >= 60 ) ? 'yellow' : 'red' );
 
         return array(
-            'score'            => $score,
-            'score_color'      => $score_color,
-            'metrics'          => $metrics,
-            'recommendations'  => $recs,
+            'score'           => $final_score,
+            'score_color'     => $score_color,
+            'metrics'         => $metrics,
+            'recommendations' => $recs,
         );
     }
+
 
     private function get_pagespeed_data( $url ) {
         $api_key = get_option( 'b2sell_pagespeed_api_key', '' );
