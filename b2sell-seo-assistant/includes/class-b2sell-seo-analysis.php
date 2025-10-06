@@ -877,8 +877,13 @@ class B2Sell_SEO_Analysis {
             if ( $ps ) {
                 echo '<h2>Velocidad y rendimiento</h2>';
                 echo '<div class="b2sell-speed-wrapper">';
+                echo '<div class="b2sell-speed-item">';
                 echo '<canvas id="b2sell-speed-score" width="200" height="120"></canvas>';
+                echo '</div>';
+                echo '<div class="b2sell-speed-item">';
                 echo '<canvas id="b2sell-speed-bars" height="120"></canvas>';
+                echo '</div>';
+                echo '<div class="b2sell-speed-item b2sell-speed-summary">';
                 echo '<ul>';
                 echo '<li>Performance score: <span style="color:' . esc_attr( $ps['score_color'] ) . ';">' . esc_html( $ps['score'] ) . '</span></li>';
                 echo '<li>TTFB: <span style="color:' . esc_attr( $ps['ttfb_color'] ) . ';">' . esc_html( $ps['ttfb'] ) . ' ms</span></li>';
@@ -893,6 +898,7 @@ class B2Sell_SEO_Analysis {
                     }
                     echo '</ul>';
                 }
+                echo '</div>';
                 echo '</div>';
                 echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
                 echo '<script>';
