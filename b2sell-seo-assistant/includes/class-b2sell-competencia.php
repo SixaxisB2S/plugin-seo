@@ -905,6 +905,12 @@ class B2Sell_Competencia {
                                 ".b2sell-comp-growth-table table{margin-top:12px;border-radius:10px;overflow:hidden;width:100%;}",
                                 ".b2sell-comp-growth-table th{background:#f3f4f6;font-weight:600;color:#111827;}",
                                 ".b2sell-comp-growth-table td{color:#1f2937;}",
+                                ".b2sell-comp-table .b2sell-rank-value{display:inline-flex;align-items:center;justify-content:center;min-width:36px;font-weight:600;color:#111827;}",
+                                ".b2sell-rank-badge{display:inline-flex;align-items:center;justify-content:center;padding:4px 10px;border-radius:999px;font-weight:600;font-size:13px;gap:6px;}",
+                                ".b2sell-rank-badge-good{background:rgba(34,197,94,0.18);color:#047857;}",
+                                ".b2sell-rank-badge-medium{background:rgba(250,204,21,0.22);color:#92400e;}",
+                                ".b2sell-rank-badge-bad{background:rgba(239,68,68,0.18);color:#b91c1c;}",
+                                ".b2sell-rank-recommendation{max-width:320px;}",
                                 ".b2sell-comp-growth-empty{margin:20px 0 0;color:#6b7280;text-align:center;}",
                                 ".b2sell-change{display:inline-flex;align-items:center;gap:6px;font-weight:600;border-radius:999px;padding:6px 12px;font-size:14px;}",
                                 ".b2sell-change-up{background:rgba(34,197,94,0.15);color:#047857;}",
@@ -920,18 +926,37 @@ class B2Sell_Competencia {
                             styleTag.appendChild(document.createTextNode(styleContent));
                             document.head.appendChild(styleTag);
                         }
+                        var escapeHtml=function(str){
+                            if(str===null||str===undefined){return '';}
+                            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+                        };
                         var formatPosition=function(value){return value&&value>0?value:"—";};
-                        var html = '<div class="b2sell-comp-table"><table class="widefat"><thead><tr><th>Keyword</th><th>'+data.domain+'</th>';
+                        var html = '<div class="b2sell-comp-table"><table class="widefat"><thead><tr><th>Keyword</th><th>'+escapeHtml(data.domain)+'</th><th>Estado</th><th>Recomendación</th>';
                         comps.forEach(function(c){
-                            html += '<th>'+c+'</th>';
+                            html += '<th>'+escapeHtml(c)+'</th>';
                         });
                         html += '</tr></thead><tbody>';
+                        var getRankStatus=function(rank){
+                            var parsed=parseInt(rank,10)||0;
+                            if(!parsed){
+                                return {label:'Sin ranking',className:'b2sell-rank-badge-bad',recommendation:'Optimiza el contenido y refuerza la autoridad para ingresar al top 20.'};
+                            }
+                            if(parsed<=3){
+                                return {label:'Excelente',className:'b2sell-rank-badge-good',recommendation:'Mantén la estrategia actual y monitorea la competencia.'};
+                            }
+                            if(parsed<=10){
+                                return {label:'Aceptable',className:'b2sell-rank-badge-medium',recommendation:'Refina títulos, meta y enlaces internos para escalar posiciones.'};
+                            }
+                            return {label:'Mejorable',className:'b2sell-rank-badge-bad',recommendation:'Refuerza el contenido, agrega backlinks y revisa la intención de búsqueda.'};
+                        };
                         kws.forEach(function(kw){
                             var row = data.results[kw] || {};
-                            html += '<tr><td>'+kw+'</td><td>'+(row.mine||'-')+'</td>';
+                            var myRank = row.mine && row.mine > 0 ? row.mine : '-';
+                            var status = getRankStatus(row.mine);
+                            html += '<tr><td>'+escapeHtml(kw)+'</td><td><span class="b2sell-rank-value">'+escapeHtml(myRank)+'</span></td><td><span class="b2sell-rank-badge '+status.className+'">'+status.label+'</span></td><td class="b2sell-rank-recommendation">'+status.recommendation+'</td>';
                             comps.forEach(function(c){
                                 var r = row.competitors && row.competitors[c] ? row.competitors[c] : '-';
-                                html += '<td>'+r+'</td>';
+                                html += '<td>'+escapeHtml(r)+'</td>';
                             });
                             html += '</tr>';
                         });
