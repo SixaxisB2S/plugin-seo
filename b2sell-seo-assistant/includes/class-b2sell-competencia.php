@@ -971,10 +971,10 @@ class B2Sell_Competencia {
                             html += '</tbody></table>';
                         }
                         html += '</div></div>';
-                        html += '<div id="b2sell_comp_visibility_container" style="margin-top:30px;">';
+                        html += '<div id="b2sell_comp_visibility_container" class="b2sell-comp-visibility-container">';
                         html += '<h3>Índice de visibilidad</h3>';
-                        html += '<canvas id="b2sell_comp_visibility_chart" height="140"></canvas>';
-                        html += '<div id="b2sell_comp_visibility_values" style="display:flex;justify-content:space-around;margin-top:10px;"></div>';
+                        html += '<canvas id="b2sell_comp_visibility_chart" class="b2sell-comp-visibility-canvas"></canvas>';
+                        html += '<div id="b2sell_comp_visibility_values" class="b2sell-comp-visibility-values"></div>';
                         html += '</div>';
                         html += '<div id="b2sell_comp_visibility_trend" style="margin-top:30px;">';
                         html += '<h3>Evolución del índice de visibilidad</h3>';
