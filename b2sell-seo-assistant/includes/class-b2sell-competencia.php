@@ -78,6 +78,11 @@ class B2Sell_Competencia {
         return $plan;
     }
 
+    private function get_visibility_weight( $volume ) {
+        $volume = (int) $volume;
+        return ( $volume > 0 ) ? $volume : 1;
+    }
+
     private function maybe_get_cached_analysis( $keyword, $provider, $result_count, $competitors, $now ) {
         global $wpdb;
         $row = $wpdb->get_row(
@@ -1072,19 +1077,20 @@ class B2Sell_Competencia {
                 if ( $cached_volume > 0 ) {
                     $volume = $cached_volume;
                 }
+                $weight = $this->get_visibility_weight( $volume );
                 $volumes_map[ $keyword ] = $volume;
                 $results[ $keyword ]     = array(
                     'mine'        => $cached['mine'],
                     'competitors' => $cached['competitors'],
                     'volume'      => $volume,
                 );
-                $visibility_totals[ $domain ] += $volume * $this->ctr_from_rank( (int) $cached['mine'] );
+                $visibility_totals[ $domain ] += $weight * $this->ctr_from_rank( (int) $cached['mine'] );
                 foreach ( $competitors as $c_domain ) {
                     if ( ! isset( $visibility_totals[ $c_domain ] ) ) {
                         $visibility_totals[ $c_domain ] = 0;
                     }
                     $rank = $cached['competitors'][ $c_domain ] ?? 0;
-                    $visibility_totals[ $c_domain ] += $volume * $this->ctr_from_rank( (int) $rank );
+                    $visibility_totals[ $c_domain ] += $weight * $this->ctr_from_rank( (int) $rank );
                 }
                 continue;
             }
@@ -1164,12 +1170,13 @@ class B2Sell_Competencia {
                 'volume'      => $volume,
             );
             $volumes_map[ $keyword ] = $volume;
-            $visibility_totals[ $domain ] += $volume * $this->ctr_from_rank( (int) $my_rank );
+            $weight = $this->get_visibility_weight( $volume );
+            $visibility_totals[ $domain ] += $weight * $this->ctr_from_rank( (int) $my_rank );
             foreach ( $competitors as $c_domain ) {
                 if ( ! isset( $visibility_totals[ $c_domain ] ) ) {
                     $visibility_totals[ $c_domain ] = 0;
                 }
-                $visibility_totals[ $c_domain ] += $volume * $this->ctr_from_rank( (int) ( $comp_ranks[ $c_domain ] ?? 0 ) );
+                $visibility_totals[ $c_domain ] += $weight * $this->ctr_from_rank( (int) ( $comp_ranks[ $c_domain ] ?? 0 ) );
             }
             $store = array();
             foreach ( $comp_ranks as $cd => $r ) {
