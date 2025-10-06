@@ -104,6 +104,29 @@ body {
     flex: 1 1 300px;
 }
 
+.b2sell-speed-wrapper {
+    display: grid;
+    gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    align-items: start;
+}
+
+.b2sell-speed-item {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.b2sell-speed-item canvas {
+    width: 100% !important;
+    height: auto !important;
+}
+
+.b2sell-speed-summary ul {
+    margin-top: 0;
+}
+
 .b2sell-comp-visibility-container {
     margin-top: 30px;
     max-width: 560px;
