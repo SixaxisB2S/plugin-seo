@@ -15,6 +15,7 @@ class B2Sell_Competencia {
         add_action( 'wp_ajax_b2sell_competencia_insert', array( $this, 'ajax_insert' ) );
         add_action( 'wp_ajax_b2sell_competencia_history_detail', array( $this, 'ajax_history_detail' ) );
         add_action( 'wp_ajax_b2sell_competencia_reanalyze', array( $this, 'ajax_reanalyze' ) );
+        add_action( 'wp_ajax_b2sell_competencia_save_domains', array( $this, 'ajax_save_domains' ) );
         add_action( 'wp_ajax_b2sell_competencia_interpret', array( $this, 'ajax_interpret' ) );
     }
 
@@ -600,6 +601,8 @@ class B2Sell_Competencia {
             var domainHelp=$("#b2sell_comp_domain_help");
             var defaultDomainHelp=domainHelp.text();
             var compDomains=Array.isArray(window.b2sellCompInitialDomains)?window.b2sellCompInitialDomains.slice(0,maxCompetitors):[];
+            var lastSavedDomainsJson=JSON.stringify(compDomains);
+            var pendingDomainsJson=null;
             function normalizeDomain(domain){
                 if(!domain){return "";}
                 domain=$.trim(domain);
@@ -634,6 +637,33 @@ class B2Sell_Competencia {
                     domainHelp.text(defaultDomainHelp);
                 }
             }
+            var saveDomainsTimer=null;
+            function scheduleSaveDomains(){
+                if(saveDomainsTimer){
+                    clearTimeout(saveDomainsTimer);
+                }
+                saveDomainsTimer=setTimeout(function(){
+                    if(typeof ajaxurl==="undefined"||!b2sellCompNonce){
+                        return;
+                    }
+                    var payloadDomains=compDomains.slice(0,maxCompetitors);
+                    var payloadJson=JSON.stringify(payloadDomains);
+                    if(payloadJson===lastSavedDomainsJson||payloadJson===pendingDomainsJson){
+                        return;
+                    }
+                    pendingDomainsJson=payloadJson;
+                    $.post(ajaxurl,{
+                        action:"b2sell_competencia_save_domains",
+                        domains:payloadDomains,
+                        _wpnonce:b2sellCompNonce
+                    },function(response){
+                        if(response&&response.success){
+                            lastSavedDomainsJson=payloadJson;
+                        }
+                        pendingDomainsJson=null;
+                    },"json");
+                },300);
+            }
             function addDomain(domain){
                 if(!domain){return;}
                 if(compDomains.indexOf(domain)!==-1){
@@ -646,6 +676,7 @@ class B2Sell_Competencia {
                 compDomains.push(domain);
                 domainInput.val("");
                 renderDomainList();
+                scheduleSaveDomains();
             }
             domainAddBtn.on("click",function(e){
                 e.preventDefault();
@@ -668,6 +699,7 @@ class B2Sell_Competencia {
                 }
                 compDomains.splice(idx,1);
                 renderDomainList();
+                scheduleSaveDomains();
             });
             renderDomainList();
             var visColors=["#0073aa","#ff6384","#36a2eb","#ffcd56","#4bc0c0","#9966ff"];
@@ -963,6 +995,17 @@ class B2Sell_Competencia {
             });
         });
         </script>';
+    }
+
+    public function ajax_save_domains() {
+        check_ajax_referer( 'b2sell_competencia_nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Permisos insuficientes' );
+        }
+        $domains = isset( $_POST['domains'] ) ? (array) $_POST['domains'] : array();
+        $domains = array_slice( array_filter( array_map( 'sanitize_text_field', $domains ) ), 0, 5 );
+        update_option( 'b2sell_comp_domains', $domains );
+        wp_send_json_success();
     }
 
     public function ajax_search() {
