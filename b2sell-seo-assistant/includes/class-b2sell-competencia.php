@@ -564,7 +564,8 @@ class B2Sell_Competencia {
             $competitors_json = '[]';
         }
         echo '<script>var b2sellCompNonce="' . esc_js( $nonce ) . '",b2sellCompProvider="' . esc_js( $provider ) . '",b2sellCompVisibilityHistory=' . $vis_history_json . ',b2sellCompPrimaryDomain="' . esc_js( $site_domain ) . '",b2sellCompInitialDomains=' . $competitors_json . ';</script>';
-        echo '<script>
+        ?>
+        <script>
         jQuery(function($){
             $(".nav-tab-wrapper .nav-tab").on("click",function(e){e.preventDefault();var t=$(this).data("tab");$(".nav-tab").removeClass("nav-tab-active");$(this).addClass("nav-tab-active");$(".b2sell-comp-tab").hide();$("#b2sell_comp_tab_"+t).show();});
             var baseNotice="Los análisis realizados en las últimas 24 horas se reutilizarán automáticamente.";
@@ -915,68 +916,73 @@ class B2Sell_Competencia {
                             document.head.appendChild(styleTag);
                         }
                         var formatPosition=function(value){return value&&value>0?value:"—";};
-                        var html="<div class=\\\"b2sell-comp-table\\\"><table class=\\\"widefat\\\"><thead><tr><th>Keyword</th><th>"+data.domain+"</th>";
-                        comps.forEach(function(c){html+="<th>"+c+"</th>";});
-                        html+="</tr></thead><tbody>";
-                        kws.forEach(function(kw){
-                            var row=data.results[kw]||{};
-                            html+="<tr><td>"+kw+"</td><td>"+(row.mine||"-")+"</td>";
-                            comps.forEach(function(c){var r=row.competitors&&row.competitors[c]?row.competitors[c]:"-";html+="<td>"+r+"</td>";});
-                            html+="</tr>";
+                        var html = '<div class="b2sell-comp-table"><table class="widefat"><thead><tr><th>Keyword</th><th>'+data.domain+'</th>';
+                        comps.forEach(function(c){
+                            html += '<th>'+c+'</th>';
                         });
-                        html+="</tbody></table></div>";
+                        html += '</tr></thead><tbody>';
+                        kws.forEach(function(kw){
+                            var row = data.results[kw] || {};
+                            html += '<tr><td>'+kw+'</td><td>'+(row.mine||'-')+'</td>';
+                            comps.forEach(function(c){
+                                var r = row.competitors && row.competitors[c] ? row.competitors[c] : '-';
+                                html += '<td>'+r+'</td>';
+                            });
+                            html += '</tr>';
+                        });
+                        html += '</tbody></table></div>';
                         var summary=data.position_summary||{};
                         var improved=parseInt(summary.up||0,10);
                         var worsened=parseInt(summary.down||0,10);
                         var unchanged=parseInt(summary.equal||0,10);
                         var changes=Array.isArray(data.position_changes)?data.position_changes:[];
-                        html+="<div class=\\\"b2sell-comp-growth\\\">";
-                        html+="<div class=\\\"b2sell-comp-growth-summary\\\">";
-                        html+="<div class=\\\"summary-card summary-card-up\\\"><span class=\\\"summary-label\\\">Keywords que mejoraron</span><span class=\\\"summary-value\\\">"+improved+"</span></div>";
-                        html+="<div class=\\\"summary-card summary-card-down\\\"><span class=\\\"summary-label\\\">Keywords que empeoraron</span><span class=\\\"summary-value\\\">"+worsened+"</span></div>";
-                        html+="<div class=\\\"summary-card summary-card-equal\\\"><span class=\\\"summary-label\\\">Keywords sin cambios</span><span class=\\\"summary-value\\\">"+unchanged+"</span></div>";
-                        html+="</div>";
-                        html+="<div class=\\\"b2sell-comp-growth-table\\\">";
-                        html+="<h3>Ranking de crecimiento/disminución</h3>";
+                        html += '<div class="b2sell-comp-growth">';
+                        html += '<div class="b2sell-comp-growth-summary">';
+                        html += '<div class="summary-card summary-card-up"><span class="summary-label">Keywords que mejoraron</span><span class="summary-value">'+improved+'</span></div>';
+                        html += '<div class="summary-card summary-card-down"><span class="summary-label">Keywords que empeoraron</span><span class="summary-value">'+worsened+'</span></div>';
+                        html += '<div class="summary-card summary-card-equal"><span class="summary-label">Keywords sin cambios</span><span class="summary-value">'+unchanged+'</span></div>';
+                        html += '</div>';
+                        html += '<div class="b2sell-comp-growth-table">';
+                        html += '<h3>Ranking de crecimiento/disminución</h3>';
                         if(!changes.length){
-                            html+="<p class=\\\"b2sell-comp-growth-empty\\\">Sin datos históricos para mostrar el ranking de crecimiento.</p>";
+                            html += '<p class="b2sell-comp-growth-empty">Sin datos históricos para mostrar el ranking de crecimiento.</p>';
                         }else{
-                            html+="<table class=\\\"widefat b2sell-growth-table\\\"><thead><tr><th>Keyword</th><th>Posición anterior</th><th>Posición actual</th><th>Cambio</th></tr></thead><tbody>";
+                            html += '<table class="widefat b2sell-growth-table"><thead><tr><th>Keyword</th><th>Posición anterior</th><th>Posición actual</th><th>Cambio</th></tr></thead><tbody>';
                             changes.forEach(function(item){
                                 var prev=formatPosition(item.previous);
                                 var curr=formatPosition(item.current);
                                 var direction=item.direction||"equal";
                                 var changeLabel=item.change_label||"=";
-                                var changeClass="b2sell-change-equal";
-                                var icon="<span class=\\\"dashicons dashicons-minus\\\"></span>";
+                                var changeClass = 'b2sell-change-equal';
+                                var icon = '<span class="dashicons dashicons-minus"></span>';
                                 if(direction==="up"){
-                                    changeClass="b2sell-change-up";
-                                    icon="<span class=\\\"dashicons dashicons-arrow-up-alt\\\"></span>";
+                                    changeClass = 'b2sell-change-up';
+                                    icon = '<span class="dashicons dashicons-arrow-up-alt"></span>';
                                     if(!changeLabel){changeLabel="Mejoró";}
                                 }else if(direction==="down"){
-                                    changeClass="b2sell-change-down";
-                                    icon="<span class=\\\"dashicons dashicons-arrow-down-alt\\\"></span>";
+                                    changeClass = 'b2sell-change-down';
+                                    icon = '<span class="dashicons dashicons-arrow-down-alt"></span>';
                                     if(!changeLabel){changeLabel="Peor";}
                                 }else if(!changeLabel){
                                     changeLabel="=";
                                 }
-                                html+="<tr><td>"+item.keyword+"</td><td>"+prev+"</td><td>"+curr+"</td><td><span class=\\\"b2sell-change "+changeClass+"\\\">"+icon+"<span>"+changeLabel+"</span></span></td></tr>";
+                                html += '<tr><td>'+item.keyword+'</td><td>'+prev+'</td><td>'+curr+'</td><td><span class="b2sell-change '+changeClass+'">'+icon+'<span>'+changeLabel+'</span></span></td></tr>';
                             });
-                            html+="</tbody></table>";
+                            html += '</tbody></table>';
                         }
-                        html+="</div></div>";
-                        html+="<div id=\\\"b2sell_comp_visibility_container\\\" style=\\\"margin-top:30px;\\\">";
-                        html+="<h3>Índice de visibilidad</h3>";
-                        html+="<canvas id=\\\"b2sell_comp_visibility_chart\\\" height=\\\"140\\\"></canvas>";
-                        html+="<div id=\\\"b2sell_comp_visibility_values\\\" style=\\\"display:flex;justify-content:space-around;margin-top:10px;\\\"></div>";
-                        html+="</div>";
-                        html+="<div id=\\\"b2sell_comp_visibility_trend\\\" style=\\\"margin-top:30px;\\\">";
-                        html+="<h3>Evolución del índice de visibilidad</h3>";
-                        html+="<div class=\\\"b2sell-comp-chart-wrapper\\\" style=\\\"position:relative;height:260px;\\\">";
-                        html+="<canvas id=\\\"b2sell_comp_visibility_trend_chart\\\" style=\\\"width:100%;height:100%;\\\"></canvas>";
-                        html+="</div>";
-                        html+="<p id=\\\"b2sell_comp_visibility_trend_empty\\\" style=\\\"display:none;margin-top:10px;\\\">Sin datos históricos de visibilidad.</p>";
-                        html+="</div>";
+                        html += '</div></div>';
+                        html += '<div id="b2sell_comp_visibility_container" style="margin-top:30px;">';
+                        html += '<h3>Índice de visibilidad</h3>';
+                        html += '<canvas id="b2sell_comp_visibility_chart" height="140"></canvas>';
+                        html += '<div id="b2sell_comp_visibility_values" style="display:flex;justify-content:space-around;margin-top:10px;"></div>';
+                        html += '</div>';
+                        html += '<div id="b2sell_comp_visibility_trend" style="margin-top:30px;">';
+                        html += '<h3>Evolución del índice de visibilidad</h3>';
+                        html += '<div class="b2sell-comp-chart-wrapper" style="position:relative;height:260px;">';
+                        html += '<canvas id="b2sell_comp_visibility_trend_chart" style="width:100%;height:100%;"></canvas>';
+                        html += '</div>';
+                        html += '<p id="b2sell_comp_visibility_trend_empty" style="display:none;margin-top:10px;">Sin datos históricos de visibilidad.</p>';
+                        html += '</div>';
                         destroyHistoryChart("b2sell_comp_visibility_trend_chart");
                         $("#b2sell_comp_results").html(html);
                         b2sellCompPrimaryDomain=data.domain||b2sellCompPrimaryDomain||"";
@@ -994,7 +1000,8 @@ class B2Sell_Competencia {
                 },"json");
             });
         });
-        </script>';
+        </script>
+        <?php
     }
 
     public function ajax_save_domains() {
