@@ -342,6 +342,176 @@ body {
     color: #455064;
 }
 
+
+.crear-blog-preview__content .b2sell-blog-article {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+    color: #0f172a;
+    font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.crear-blog-preview__content .b2sell-blog-hero {
+    display: grid;
+    gap: 24px;
+    padding: 32px;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(59, 130, 246, 0.12));
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.crear-blog-preview__content .b2sell-blog-hero__content h1 {
+    font-size: 2rem;
+    line-height: 1.2;
+    margin: 0;
+    color: #0f172a;
+}
+
+.crear-blog-preview__content .b2sell-blog-hero__media {
+    margin: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.15);
+    background: #fff;
+}
+
+.crear-blog-preview__content .b2sell-blog-hero__media img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.crear-blog-preview__content .b2sell-blog-hero__media figcaption {
+    font-size: 0.875rem;
+    padding: 12px 16px;
+    color: #475569;
+    background: #f8fafc;
+}
+
+.crear-blog-preview__content .b2sell-blog-body {
+    padding: 32px;
+}
+
+.crear-blog-preview__content .b2sell-blog-lead {
+    font-size: 1.125rem;
+    color: #1f2937;
+    font-weight: 500;
+}
+
+.crear-blog-preview__content .b2sell-blog-body h2 {
+    margin-top: 2.5em;
+    color: #0f172a;
+    position: relative;
+    padding-bottom: 0.5em;
+}
+
+.crear-blog-preview__content .b2sell-blog-body h2::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 60px;
+    height: 3px;
+    background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+    border-radius: 999px;
+}
+
+.crear-blog-preview__content .b2sell-blog-body h3 {
+    margin-top: 1.5em;
+    color: #1f2937;
+}
+
+.crear-blog-preview__content .b2sell-blog-inline-media {
+    margin: 24px 0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+
+.crear-blog-preview__content .b2sell-blog-inline-media img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.crear-blog-preview__content .b2sell-blog-inline-media figcaption {
+    padding: 12px 16px;
+    font-size: 0.9rem;
+    color: #475569;
+    background: #f8fafc;
+}
+
+.crear-blog-preview__content .b2sell-blog-body ul,
+.crear-blog-preview__content .b2sell-blog-body ol {
+    padding-left: 1.6em;
+    margin: 1.5em 0;
+}
+
+.crear-blog-preview__content .b2sell-blog-body li {
+    margin-bottom: 0.6em;
+}
+
+.crear-blog-preview__content .b2sell-blog-footer {
+    padding: 28px 32px 36px;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.16), rgba(59, 130, 246, 0.18));
+    border-top: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.crear-blog-preview__content .b2sell-blog-cta {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.crear-blog-preview__content .b2sell-blog-cta__label {
+    font-size: 0.95rem;
+    color: #0f172a;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.crear-blog-preview__content .b2sell-blog-cta-button.button {
+    background: linear-gradient(135deg, #0ea5e9, #2563eb);
+    border: none;
+    padding: 12px 28px;
+    font-size: 1rem;
+    border-radius: 999px;
+    box-shadow: 0 12px 24px rgba(37, 99, 235, 0.25);
+}
+
+.crear-blog-preview__content .b2sell-blog-cta-button.button:hover,
+.crear-blog-preview__content .b2sell-blog-cta-button.button:focus {
+    background: linear-gradient(135deg, #0284c7, #1d4ed8);
+    box-shadow: 0 14px 28px rgba(30, 64, 175, 0.28);
+}
+
+.crear-blog-preview__content .b2sell-blog-body a {
+    color: #2563eb;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(37, 99, 235, 0.4);
+    transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.crear-blog-preview__content .b2sell-blog-body a:hover,
+.crear-blog-preview__content .b2sell-blog-body a:focus {
+    color: #1d4ed8;
+    border-color: rgba(29, 78, 216, 0.6);
+}
+
+.crear-blog-preview__content .b2sell-blog-body blockquote {
+    border-left: 4px solid rgba(14, 165, 233, 0.6);
+    padding-left: 18px;
+    color: #475569;
+    font-style: italic;
+    margin: 24px 0;
+}
+
+.crear-blog-preview__content .b2sell-blog-body strong {
+    color: #0f172a;
+}
+
 .crear-blog-preview__content ul,
 .crear-blog-preview__content ol {
     margin: 0 0 1.2em 1.4em;
@@ -498,5 +668,23 @@ body {
 @media (max-width: 600px) {
     .b2sell-dashboard-grid {
         flex-direction: column;
+    }
+}
+
+
+@media (min-width: 900px) {
+    .crear-blog-preview__content .b2sell-blog-hero {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: center;
+    }
+
+    .crear-blog-preview__content .b2sell-blog-hero__content {
+        padding-right: 24px;
+    }
+
+    .crear-blog-preview__content .b2sell-blog-cta {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
     }
 }
