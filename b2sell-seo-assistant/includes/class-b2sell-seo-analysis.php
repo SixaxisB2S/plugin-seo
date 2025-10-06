@@ -594,6 +594,40 @@ class B2Sell_SEO_Analysis {
         $stored_keyword = get_post_meta( $post_id, '_b2sell_focus_keyword', true );
         $keyword        = isset( $_POST['b2sell_keyword'] ) ? sanitize_text_field( wp_unslash( $_POST['b2sell_keyword'] ) ) : $stored_keyword;
         $results        = false;
+        $tasks_notice   = false;
+
+        $stored_tasks = get_post_meta( $post_id, '_b2sell_seo_tasks', true );
+        $tasks        = array();
+        if ( is_array( $stored_tasks ) ) {
+            foreach ( $stored_tasks as $task ) {
+                if ( empty( $task['id'] ) ) {
+                    continue;
+                }
+                $task_id            = preg_replace( '/[^a-z0-9]/i', '', $task['id'] );
+                $tasks[ $task_id ] = array(
+                    'id'        => $task_id,
+                    'label'     => isset( $task['label'] ) ? sanitize_text_field( $task['label'] ) : '',
+                    'completed' => ! empty( $task['completed'] ),
+                );
+            }
+        }
+
+        if ( isset( $_POST['b2sell_save_tasks'] ) && isset( $_POST['b2sell_tasks_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['b2sell_tasks_nonce'] ) ), 'b2sell_save_tasks' ) ) {
+            $completed = isset( $_POST['b2sell_task'] ) ? (array) $_POST['b2sell_task'] : array();
+            $completed = wp_unslash( $completed );
+            $completed = array_map( 'sanitize_text_field', $completed );
+            foreach ( $tasks as $id => &$task ) {
+                $task['completed'] = in_array( $id, $completed, true );
+            }
+            unset( $task );
+            update_post_meta( $post_id, '_b2sell_seo_tasks', array_values( $tasks ) );
+            $tasks_notice = true;
+        }
+
+        $stored_results = get_post_meta( $post_id, '_b2sell_seo_last_results', true );
+        if ( is_array( $stored_results ) && ! isset( $_POST['b2sell_seo_analyze'] ) ) {
+            $results = $stored_results;
+        }
 
         if ( isset( $_POST['b2sell_seo_analyze'] ) ) {
             $results = $this->perform_analysis( $post_id, $keyword );
@@ -607,10 +641,37 @@ class B2Sell_SEO_Analysis {
                 'recommendations' => array_slice( wp_list_pluck( $results['recommendations'], 'message' ), 0, 3 ),
             );
             update_post_meta( $post_id, '_b2sell_seo_history', $history );
+            update_post_meta( $post_id, '_b2sell_seo_last_results', $results );
             if ( $keyword ) {
                 update_post_meta( $post_id, '_b2sell_focus_keyword', $keyword );
             } else {
                 delete_post_meta( $post_id, '_b2sell_focus_keyword' );
+            }
+            if ( ! empty( $results['recommendations'] ) ) {
+                $tasks_changed = false;
+                foreach ( $results['recommendations'] as $rec ) {
+                    if ( empty( $rec['message'] ) ) {
+                        continue;
+                    }
+                    $task_id = md5( $rec['message'] );
+                    $new_label = sanitize_text_field( $rec['message'] );
+                    if ( ! isset( $tasks[ $task_id ] ) ) {
+                        $tasks[ $task_id ] = array(
+                            'id'        => $task_id,
+                            'label'     => $new_label,
+                            'completed' => false,
+                        );
+                        $tasks_changed = true;
+                    } else {
+                        if ( $tasks[ $task_id ]['label'] !== $new_label ) {
+                            $tasks[ $task_id ]['label'] = $new_label;
+                            $tasks_changed = true;
+                        }
+                    }
+                }
+                if ( $tasks_changed ) {
+                    update_post_meta( $post_id, '_b2sell_seo_tasks', array_values( $tasks ) );
+                }
             }
         }
 
@@ -625,6 +686,9 @@ class B2Sell_SEO_Analysis {
         $back_label = ( 'products' === $section ) ? '« Volver a Productos' : '« Volver al listado';
 
         echo '<div class="wrap">';
+        if ( $tasks_notice ) {
+            echo '<div class="notice notice-success is-dismissible"><p>Checklist actualizado.</p></div>';
+        }
         echo '<p><a href="' . esc_url( $back_url ) . '">' . esc_html( $back_label ) . '</a></p>';
         echo '<h1>Analizando: ' . esc_html( $post->post_title ) . '</h1>';
         echo '<form method="post">';
@@ -653,6 +717,29 @@ class B2Sell_SEO_Analysis {
                     echo '</li>';
                 }
                 echo '</ul>';
+            }
+
+            echo '<p><button type="button" class="button" id="b2sell-toggle-detail">Ver análisis detallado</button></p>';
+            echo '<div id="b2sell-analysis-detail" style="display:none;margin-top:20px;">';
+            echo '<h3>Checklist de tareas SEO</h3>';
+            if ( ! empty( $tasks ) ) {
+                echo '<form method="post" style="margin-bottom:20px;">';
+                wp_nonce_field( 'b2sell_save_tasks', 'b2sell_tasks_nonce' );
+                echo '<ul class="b2sell-tasks-list" style="list-style:disc;padding-left:20px;">';
+                foreach ( $tasks as $task ) {
+                    $status_label = $task['completed'] ? 'Completada' : 'Pendiente';
+                    $status_color = $task['completed'] ? '#008a20' : '#b54a00';
+                    echo '<li style="margin-bottom:8px;"><label><input type="checkbox" name="b2sell_task[]" value="' . esc_attr( $task['id'] ) . '" ' . checked( $task['completed'], true, false ) . ' /> ' . esc_html( $task['label'] ) . '</label> <span style="font-style:italic;color:' . esc_attr( $status_color ) . ';">' . esc_html( $status_label ) . '</span></li>';
+                }
+                echo '</ul>';
+                submit_button( 'Guardar checklist', 'secondary', 'b2sell_save_tasks', false );
+                echo '</form>';
+            } else {
+                echo '<p>No hay tareas registradas aún. Ejecuta un análisis para generar nuevas recomendaciones.</p>';
+            }
+            echo '</div>';
+            if ( $tasks_notice ) {
+                echo '<script>jQuery(function($){$("#b2sell-analysis-detail").show();$("#b2sell-toggle-detail").text("Ocultar análisis detallado");});</script>';
             }
 
             echo '<div id="b2sell-gpt-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;">'
@@ -697,6 +784,13 @@ class B2Sell_SEO_Analysis {
                 . '});'
                 . '$("#b2sell-gpt-close").on("click",function(){'
                 . '$("#b2sell-gpt-modal").hide();'
+                . '});'
+                . '$("#b2sell-toggle-detail").on("click",function(){'
+                . 'var $detail=$("#b2sell-analysis-detail");'
+                . 'var $button=$(this);'
+                . '$detail.slideToggle(200,function(){'
+                . '$button.text($detail.is(":visible")?"Ocultar análisis detallado":"Ver análisis detallado");'
+                . '});'
                 . '});'
                 . '});'
                 . '</script>';
